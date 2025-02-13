@@ -22,6 +22,7 @@ from django.db import models
 
 
 class SensorData(models.Model):
+
     device = models.CharField(max_length=100)
     quality = models.CharField(max_length=50)
     co2 = models.IntegerField()
@@ -37,3 +38,37 @@ class SensorData(models.Model):
 
     def __str__(self):
         return f"{self.device} @ {self.timestamp}"
+
+
+class EMData(models.Model):
+    
+    device_id = models.IntegerField()
+    a_current = models.FloatField()
+    a_voltage = models.FloatField()
+    a_act_power = models.FloatField()
+    a_aprt_power = models.FloatField()
+    a_pf = models.FloatField()
+    a_freq = models.FloatField()
+    b_current = models.FloatField()
+    b_voltage = models.FloatField()
+    b_act_power = models.FloatField()
+    b_aprt_power = models.FloatField()
+    b_pf = models.FloatField()
+    b_freq = models.FloatField()
+    c_current = models.FloatField()
+    c_voltage = models.FloatField()
+    c_act_power = models.FloatField()
+    c_aprt_power = models.FloatField()
+    c_pf = models.FloatField()
+    c_freq = models.FloatField()
+    # n_current = models.FloatField()
+    total_current = models.FloatField()
+    total_act_power = models.FloatField()
+    total_aprt_power = models.FloatField()
+    # user_calibrated_phase = models.FloatField()
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.device_id} @ {self.timestamp}"
+
+

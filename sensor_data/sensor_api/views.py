@@ -7,8 +7,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
-from .models import SensorData
-from .serializers import SensorDataSerializer
+from .models import SensorData, EMData
+from .serializers import SensorDataSerializer, EMDataSerializer
 
 # class SensorReadingCreateView(APIView):
 #     # Allow all clients (no authentication needed)
@@ -31,3 +31,13 @@ class SensorDataListView(APIView):
             return Response(serializer.data)
         else:
             return Response({"detail": "No sensor data available."})
+        
+class EMDataListView(APIView):
+    def get(self, request, format=None):
+        # For example, get the most recent EM data entry
+        latest_data = EMData.objects.order_by('-timestamp').first()
+        if latest_data:
+            serializer = EMDataSerializer(latest_data)
+            return Response(serializer.data)
+        else:
+            return Response({"detail": "No EM data available."})
