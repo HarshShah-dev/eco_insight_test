@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from .models import SensorData, EMData
-from .serializers import SensorDataSerializer, EMDataSerializer
+from .serializers import SensorDataSerializer, EMDataSerializer, RawSensorDataSerializer
 
 # class SensorReadingCreateView(APIView):
 #     # Allow all clients (no authentication needed)
@@ -41,3 +41,15 @@ class EMDataListView(APIView):
             return Response(serializer.data)
         else:
             return Response({"detail": "No EM data available."})
+        
+class RawSensorDataCreateView(APIView):
+    # Allow all requests without authentication
+    permission_classes = [AllowAny]
+
+    def post(self, request, format=None):
+        # Wrap the incoming JSON data into a dict with key 'raw_data'
+        serializer = RawSensorDataSerializer(data={'raw_data': request.data})
+        if serializer.is_valid():
+            serializer.save()  # Save the raw data to the database
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

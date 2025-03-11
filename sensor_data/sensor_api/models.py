@@ -72,3 +72,9 @@ class EMData(models.Model):
         return f"{self.device_id} @ {self.timestamp}"
 
 
+class RawSensorData(models.Model):
+    raw_data = models.JSONField()  # Stores the entire JSON payload
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Data received at {self.received_at}"
