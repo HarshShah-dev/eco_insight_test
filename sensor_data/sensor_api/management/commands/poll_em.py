@@ -8,7 +8,7 @@ class Command(BaseCommand):
     help = "Poll sensor data every 10 seconds and store it in the database."
 
     def handle(self, *args, **options):
-        url = "http://192.168.0.27/rpc/EM.GetStatus?id=0"  # Using HTTPS here
+        url = "http://192.168.68.51/rpc/EM.GetStatus?id=0"  # Using HTTPS here
         self.stdout.write("Starting sensor polling... (Press CTRL+C to stop)")
         
         # Optionally, disable warnings about insecure requests:

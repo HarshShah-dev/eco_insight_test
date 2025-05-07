@@ -78,3 +78,27 @@ class RawSensorData(models.Model):
 
     def __str__(self):
         return f"Data received at {self.received_at}"
+    
+class ParsedSensorData(models.Model):
+    mac = models.CharField(max_length=50, blank=True, null=True)
+    frame_version = models.CharField(max_length=10, blank=True, null=True)
+    battery = models.IntegerField(blank=True, null=True)
+    firmware_version = models.CharField(max_length=20, blank=True, null=True)
+    peripheral_support = models.CharField(max_length=50, blank=True, null=True)
+    salt = models.CharField(max_length=10, blank=True, null=True)
+    digital_signature = models.CharField(max_length=10, blank=True, null=True)
+    usage = models.CharField(max_length=10, blank=True, null=True)
+    serial_number = models.IntegerField(blank=True, null=True)
+    entries = models.IntegerField(blank=True, null=True)
+    exits = models.IntegerField(blank=True, null=True)
+    random_number = models.CharField(max_length=10, blank=True, null=True)
+    raw_data = models.TextField()
+    rssi = models.IntegerField(blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    total_entries = models.IntegerField(default=0)
+    total_exits = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+
+    def __str__(self):
+        return f"{self.mac} @ {self.timestamp}"

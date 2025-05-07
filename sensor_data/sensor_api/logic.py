@@ -73,26 +73,21 @@ class SensorDataBulkCreateView(APIView):
         rssi = -1
         mac = 123
         # timestamp_str = "2025-03-25T06:02:57.717Z"
-        s_no = 0
-        i_s_no = 0
 
         # Get cumulative totals from the latest record in the database (if any)
         last_record = ParsedSensorData.objects.order_by('-created_at').first()
         if last_record:
             i_total_entries = last_record.total_entries
             i_total_exits = last_record.total_exits
-            i_s_no = last_record.serial_number
-            print(i_s_no)
         else:
             i_total_entries = 0
             i_total_exits = 0
-            i_s_no = 0
 
         for item in sensor_data_list:
             # Skip gateway records
             if "gateway" in item:
                 continue
-
+            
             if "raw" in item:
                 raw = item.get("raw")
                 parsed_dict.update(parse_minew_data(raw))
@@ -104,7 +99,7 @@ class SensorDataBulkCreateView(APIView):
             else:
                 errors.append(f"Missing 'raw' field in item: {item}")
                 continue
-            
+
             mac = item.get("mac")
             rssi = item.get("rssi")
             timestamp_1 = timezone.now()  # Default to current time if not provided
@@ -114,18 +109,15 @@ class SensorDataBulkCreateView(APIView):
             #     errors.append(f"Invalid timestamp: {timestamp_str}")
             #     continue
         timestamp_1 = timezone.now()
-
         # Get the number of new entries and exits from the parsed data.
-        s_no = int(parsed_dict.get("serial_number", 0))
-        print(s_no)
         entries = int(parsed_dict.get("entries", 0))
         exits = int(parsed_dict.get("exits", 0))
         
         
-        if s_no != i_s_no:
+
         # Update cumulative totals
-            i_total_entries += entries
-            i_total_exits += exits
+        i_total_entries += entries
+        i_total_exits += exits
         # i_total_entries += int(parsed_dict.get("entries", 0))
         # i_total_exits += int(parsed_dict.get("exits", 0))
 

@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from .models import SensorData, EMData, RawSensorData
+from .models import SensorData, EMData, RawSensorData, ParsedSensorData
 
 class SensorDataSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,4 +15,9 @@ class EMDataSerializer(serializers.ModelSerializer):
 class RawSensorDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = RawSensorData
+        fields = '__all__'
+
+class ParsedSensorDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParsedSensorData
         fields = '__all__'
