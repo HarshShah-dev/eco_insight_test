@@ -1,0 +1,59 @@
+/* SensorDashboard.css */
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 24px;
+  padding: 24px;
+  background-color: #f9f9f9;
+  min-height: 50vh;
+}
+
+.chart-card {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: white;
+  padding: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.4s ease;
+}
+
+.chart-card:hover {
+  transform: scale(1.11);
+}
+
+.chart-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.metric-card {
+  border-radius: 16px;
+  background-color: white;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 150px;
+  transition: transform 0.4s ease;
+}
+
+.metric-card:hover {
+  transform: scale(1.09);
+}
+
+.metric-label {
+  font-size: 18px;
+  color: #636e72;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: bold;
+  margin: 0;
+}
+
