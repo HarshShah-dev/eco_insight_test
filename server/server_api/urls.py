@@ -1,5 +1,10 @@
 from django.urls import path
-from .views import AirQualityDataListView, EnergyDataListView, OccupancyDataCreateView, AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView, EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4
+from .views import (
+    AirQualityDataListView, EnergyDataListView, OccupancyDataCreateView,
+    AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView,
+    EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView,
+    SensorListView, SensorDetailView
+)
 
 urlpatterns = [
     path('data/co2', AirQualityDataListView.as_view(), name='aq_data'),
@@ -11,4 +16,9 @@ urlpatterns = [
     path('data/oc/history', OccupancyDataHistoryView.as_view()),
     path('data/em/history/level3', EnergyDataHistoryViewLevel3.as_view()),
     path('data/em/history/level4', EnergyDataHistoryViewLevel4.as_view()),
+    path('data/radar', RadarDataCreateView.as_view(), name='radar_data'),
+    
+    # Sensor management endpoints
+    path('sensors', SensorListView.as_view(), name='sensor_list'),
+    path('sensors/<str:sensor_id>', SensorDetailView.as_view(), name='sensor_detail'),
 ]

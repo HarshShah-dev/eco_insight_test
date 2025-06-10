@@ -214,7 +214,7 @@ export default function SensorDashboard({ section = "all" }) {
       )}
 
       {(section === "all" || section === "occupancy") && (
-        <ChartCard title="Occupancy - Entries/Exits" data={ocData} dataKeys={["entries", "exits"]} unit="" />
+        <ChartCard title="Occupancy - Entries/Exits" data={ocData} dataKeys={["total_entries", "total_exits"]} unit="" />
       )}
     </div>
   );

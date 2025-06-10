@@ -5,6 +5,18 @@ import requests
 from django.core.management.base import BaseCommand
 from server_api.models import AirQualityData, Sensor
 
+def get_or_create_sensor(sensor_id, sensor_type):
+    try:
+        sensor = Sensor.objects.get(sensor_id=sensor_id)
+        return sensor
+    except Sensor.DoesNotExist:
+        sensor = Sensor.objects.create(
+            sensor_id=sensor_id,
+            sensor_type=sensor_type,
+            description=f"Auto-created {sensor_type} sensor"
+        )
+        return sensor
+
 class Command(BaseCommand):
     help = "Poll sensor data every 10 seconds and store it in the database."
 
@@ -24,8 +36,13 @@ class Command(BaseCommand):
                     data = response.json()
                     self.stdout.write(f"Received data: {data}")
                     
+                    # Get or create sensor
+                    device_id = data.get("device")
+                    sensor = get_or_create_sensor(device_id, 'AQ')
+                    
                     sensor_record = AirQualityData(
-                        device=data.get("device"),
+                        sensor=sensor,
+                        device=device_id,
                         quality=data.get("quality"),
                         co2=data.get("co2"),
                         temp=data.get("temp"),

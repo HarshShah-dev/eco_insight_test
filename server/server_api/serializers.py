@@ -1,13 +1,31 @@
-
 from rest_framework import serializers
-from .models import AirQualityData, EnergyData, OccupancyData
+from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor
+
+class SensorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sensor
+        fields = ['id', 'sensor_id', 'sensor_type', 'floor', 'office', 'description', 'active']
 
 class AirQualityDataSerializer(serializers.ModelSerializer):
+    sensor = SensorSerializer(read_only=True)
+    sensor_id = serializers.PrimaryKeyRelatedField(
+        queryset=Sensor.objects.filter(sensor_type='AQ'),
+        source='sensor',
+        write_only=True
+    )
+
     class Meta:
         model = AirQualityData
         fields = '__all__'
 
 class EnergyDataSerializer(serializers.ModelSerializer):
+    sensor = SensorSerializer(read_only=True)
+    sensor_id = serializers.PrimaryKeyRelatedField(
+        queryset=Sensor.objects.filter(sensor_type='EM'),
+        source='sensor',
+        write_only=True
+    )
+
     class Meta:
         model = EnergyData
         fields = '__all__'
@@ -18,6 +36,25 @@ class EnergyDataSerializer(serializers.ModelSerializer):
 #         fields = '__all__'
 
 class OccupancyDataSerializer(serializers.ModelSerializer):
+    sensor = SensorSerializer(read_only=True)
+    sensor_id = serializers.PrimaryKeyRelatedField(
+        queryset=Sensor.objects.filter(sensor_type='OC'),
+        source='sensor',
+        write_only=True
+    )
+
     class Meta:
         model = OccupancyData
+        fields = '__all__'
+
+class RadarDataSerializer(serializers.ModelSerializer):
+    sensor = SensorSerializer(read_only=True)
+    sensor_id = serializers.PrimaryKeyRelatedField(
+        queryset=Sensor.objects.filter(sensor_type='RD'),
+        source='sensor',
+        write_only=True
+    )
+
+    class Meta:
+        model = RadarData
         fields = '__all__'

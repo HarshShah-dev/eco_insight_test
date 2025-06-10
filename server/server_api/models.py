@@ -22,7 +22,7 @@ from django.db import models
 
 
 class AirQualityData(models.Model):
-    # sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='AQ_data')
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='aq_data', null=True, blank=True)
     device = models.CharField(max_length=100)
     quality = models.CharField(max_length=50)
     co2 = models.IntegerField()
@@ -41,8 +41,7 @@ class AirQualityData(models.Model):
 
 
 class EnergyData(models.Model):
-    
-    # sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='EM_data')
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='em_data', null=True, blank=True)
     device_id = models.IntegerField()
     a_current = models.FloatField()
     a_voltage = models.FloatField()
@@ -81,8 +80,7 @@ class EnergyData(models.Model):
 #         return f"Data received at {self.received_at}"
     
 class OccupancyData(models.Model):
-
-    # sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='OC_data')
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='oc_data', null=True, blank=True)
     mac = models.CharField(max_length=50, blank=True, null=True)
     frame_version = models.CharField(max_length=10, blank=True, null=True)
     battery = models.IntegerField(blank=True, null=True)
@@ -108,14 +106,14 @@ class OccupancyData(models.Model):
     
 
 class Sensor(models.Model):
-
     SENSOR_TYPES = [
         ('EM', 'Energy Meter'),
         ('AQ', 'Air Quality'),
         ('OC', 'Occupancy'),
+        ('RD', 'Radar'),
     ]
     sensor_id = models.CharField(max_length=100, unique=True)
-    # company_name = models.CharField(max_length=2, choices=SENSOR_TYPES)
+    sensor_type = models.CharField(max_length=2, choices=SENSOR_TYPES)
     floor = models.IntegerField(blank=True, null=True)
     office = models.CharField(max_length=100, blank=True, null=True)
     description = models.CharField(max_length=100, blank=True)
@@ -123,3 +121,17 @@ class Sensor(models.Model):
 
     def __str__(self):
         return f"{self.get_sensor_type_display()} {self.sensor_id} @ {self.floor}/{self.office}"
+    
+
+class RadarData(models.Model):
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='radar_data', null=True, blank=True)
+    mac = models.CharField(max_length=100)
+    sn = models.IntegerField()  # Sequence number
+    timestamp = models.DateTimeField(auto_now_add=True)
+    num_targets = models.IntegerField()
+    coordinates = models.JSONField()  # Store raw 'coord' field
+    raw_payload = models.JSONField()  # Save original JSON (optional)
+
+    def __str__(self):
+        return f"RadarData from {self.mac} at {self.timestamp}"
+    

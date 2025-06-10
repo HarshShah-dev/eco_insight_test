@@ -4,12 +4,24 @@ import requests
 from django.core.management.base import BaseCommand
 from server_api.models import EnergyData, Sensor
 
+def get_or_create_sensor(sensor_id, sensor_type):
+    try:
+        sensor = Sensor.objects.get(sensor_id=sensor_id)
+        return sensor
+    except Sensor.DoesNotExist:
+        sensor = Sensor.objects.create(
+            sensor_id=sensor_id,
+            sensor_type=sensor_type,
+            description=f"Auto-created {sensor_type} sensor"
+        )
+        return sensor
+
 class Command(BaseCommand):
     help = "Poll sensor data every 10 seconds and store it in the database."
 
     def handle(self, *args, **options):
-        url = "http://192.168.68.54/rpc/EM.GetStatus?id=0"  # Using HTTPS here
-        url2 = "http://192.168.68.55/rpc/EM.GetStatus?id=0"
+        url = "http://192.168.68.52/rpc/EM.GetStatus?id=0"  # Using HTTPS here
+        url2 = "http://192.168.68.51/rpc/EM.GetStatus?id=0"
         self.stdout.write("Starting sensor polling... (Press CTRL+C to stop)")
         
         # Optionally, disable warnings about insecure requests:
@@ -26,7 +38,11 @@ class Command(BaseCommand):
                     data = response.json()
                     self.stdout.write(f"Received data from Level 3: {data}")
 
+                    # Get or create sensor for Level 3
+                    sensor = get_or_create_sensor('0', 'EM')
+
                     em_record = EnergyData(
+                        sensor=sensor,
                         device_id=0,
                         a_current=data.get("a_current"),
                         a_voltage=data.get("a_voltage"),
@@ -61,7 +77,11 @@ class Command(BaseCommand):
                     data2 = response2.json()
                     self.stdout.write(f"Received data from Level 4: {data2}")
 
+                    # Get or create sensor for Level 4
+                    sensor2 = get_or_create_sensor('1', 'EM')
+
                     em_record2 = EnergyData(
+                        sensor=sensor2,
                         device_id=1,
                         a_current=data2.get("a_current"),
                         a_voltage=data2.get("a_voltage"),
