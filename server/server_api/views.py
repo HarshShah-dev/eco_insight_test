@@ -7,8 +7,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
-from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData
-from .serializers import AirQualityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer
+from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData
+from .serializers import AirQualityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer
 from dateutil import parser as dateparser
 from .utils import parse_minew_data
 from django.utils import timezone
@@ -282,3 +282,26 @@ class SensorDetailView(APIView):
         sensor = get_object_or_404(Sensor, sensor_id=sensor_id)
         sensor.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class SensorDataListView(APIView):
+    def get(self, request):
+        data = SensorData.objects.order_by('-timestamp')[:100]  # last 100 entries
+        return Response(SensorDataSerializer(data, many=True).data)
+
+    def post(self, request):
+        serializer = SensorDataSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class SensorDataHistoryView(APIView):
+    def get(self, request, sensor_id):
+        sensor = get_object_or_404(Sensor, sensor_id=sensor_id)
+        data = SensorData.objects.filter(sensor=sensor).order_by('-timestamp')[:100]
+        return Response(SensorDataSerializer(data, many=True).data)
+
+class SensorDataByActionView(APIView):
+    def get(self, request, action):
+        data = SensorData.objects.filter(action=action).order_by('-timestamp')[:100]
+        return Response(SensorDataSerializer(data, many=True).data)

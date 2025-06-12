@@ -35,9 +35,31 @@ class AirQualityData(models.Model):
     pm4 = models.FloatField()
     timestamp = models.DateTimeField()
     version = models.CharField(max_length=50)
+    action = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return f"{self.device} @ {self.timestamp}"
+
+    def determine_action(self):
+        actions = []
+        if self.co2 > 1000:
+            actions.append('ALERT - HIGH_CO2 - Increase Ventilation')
+        elif self.co2 > 800:
+            actions.append('HIGH_CO2 - Increase Ventilation')
+        if self.pm2p5 > 35:
+            actions.append('HIGH_PM2P5 - Increase Ventilation')
+        if self.temp > 30:
+            actions.append('ALERT - HIGH_TEMP - Increase Cooling')
+        elif self.temp > 26:
+            actions.append('HIGH_TEMP - Increase Cooling')
+        if self.temp < 18:
+            actions.append('LOW_TEMP - Increase Heating')
+        return ' | '.join(actions) if actions else 'NORMAL_AQ'
+
+    def save(self, *args, **kwargs):
+        if not self.action:
+            self.action = self.determine_action()
+        super().save(*args, **kwargs)
 
 
 class EnergyData(models.Model):
@@ -67,9 +89,22 @@ class EnergyData(models.Model):
     total_aprt_power = models.FloatField()
     # user_calibrated_phase = models.FloatField()
     timestamp = models.DateTimeField()
+    action = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return f"{self.device_id} @ {self.timestamp}"
+
+    def determine_action(self):
+        if self.total_act_power > 7000:
+            return 'HIGH_POWER_USAGE'
+        if self.a_current > 10:
+            return 'HIGH_CURRENT'
+        return 'NORMAL_EM'
+
+    def save(self, *args, **kwargs):
+        if not self.action:
+            self.action = self.determine_action()
+        super().save(*args, **kwargs)
 
 
 # class RawSensorData(models.Model):
@@ -99,10 +134,27 @@ class OccupancyData(models.Model):
     total_entries = models.IntegerField(default=0)
     total_exits = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=100, blank=True, null=True)
     
 
     def __str__(self):
         return f"{self.mac} @ {self.timestamp}"
+    
+    def determine_action(self):
+        if self.total_entries > (self.total_exits + 100):
+            return 'VERY_POPULATED - Increase HVAC'
+        if self.total_entries <= self.total_exits:
+            return 'Decrease HVAC'
+        if self.entries and self.entries > 0:
+            return 'ENTRY_DETECTED'
+        if self.exits and self.exits > 0:
+            return 'EXIT_DETECTED'
+        return 'NO_MOVEMENT'
+
+    def save(self, *args, **kwargs):
+        if not self.action:
+            self.action = self.determine_action()
+        super().save(*args, **kwargs)
     
 
 class Sensor(models.Model):
@@ -131,7 +183,137 @@ class RadarData(models.Model):
     num_targets = models.IntegerField()
     coordinates = models.JSONField()  # Store raw 'coord' field
     raw_payload = models.JSONField()  # Save original JSON (optional)
+    action = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return f"RadarData from {self.mac} at {self.timestamp}"
+
+    def determine_action(self):
+        if self.num_targets > 3:
+            return 'VERY_POPULATED - Increase HVAC'
+        return 'NO_MOVEMENT'
+
+    def save(self, *args, **kwargs):
+        if not self.action:
+            self.action = self.determine_action()
+        super().save(*args, **kwargs)
+    
+
+class SensorData(models.Model):
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='all_data')
+    timestamp = models.DateTimeField()
+    action = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Common fields that might be present in any sensor data
+    device_id = models.CharField(max_length=100, blank=True, null=True)
+    mac = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Air Quality specific fields
+    quality = models.CharField(max_length=50, blank=True, null=True)
+    co2 = models.IntegerField(blank=True, null=True)
+    temp = models.IntegerField(blank=True, null=True)
+    humidity = models.IntegerField(blank=True, null=True)
+    voc = models.IntegerField(blank=True, null=True)
+    pm2p5 = models.FloatField(blank=True, null=True)
+    pm10 = models.FloatField(blank=True, null=True)
+    pm1 = models.FloatField(blank=True, null=True)
+    pm4 = models.FloatField(blank=True, null=True)
+    version = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Energy Meter specific fields
+    a_current = models.FloatField(blank=True, null=True)
+    a_voltage = models.FloatField(blank=True, null=True)
+    a_act_power = models.FloatField(blank=True, null=True)
+    a_aprt_power = models.FloatField(blank=True, null=True)
+    a_pf = models.FloatField(blank=True, null=True)
+    a_freq = models.FloatField(blank=True, null=True)
+    b_current = models.FloatField(blank=True, null=True)
+    b_voltage = models.FloatField(blank=True, null=True)
+    b_act_power = models.FloatField(blank=True, null=True)
+    b_aprt_power = models.FloatField(blank=True, null=True)
+    b_pf = models.FloatField(blank=True, null=True)
+    b_freq = models.FloatField(blank=True, null=True)
+    c_current = models.FloatField(blank=True, null=True)
+    c_voltage = models.FloatField(blank=True, null=True)
+    c_act_power = models.FloatField(blank=True, null=True)
+    c_aprt_power = models.FloatField(blank=True, null=True)
+    c_pf = models.FloatField(blank=True, null=True)
+    c_freq = models.FloatField(blank=True, null=True)
+    total_current = models.FloatField(blank=True, null=True)
+    total_act_power = models.FloatField(blank=True, null=True)
+    total_aprt_power = models.FloatField(blank=True, null=True)
+    
+    # Occupancy specific fields
+    frame_version = models.CharField(max_length=10, blank=True, null=True)
+    serial_number = models.IntegerField(blank=True, null=True)
+    entries = models.IntegerField(blank=True, null=True)
+    exits = models.IntegerField(blank=True, null=True)
+    total_entries = models.IntegerField(default=0)
+    total_exits = models.IntegerField(default=0)
+    
+    # Radar specific fields
+    sn = models.IntegerField(blank=True, null=True)
+    num_targets = models.IntegerField(blank=True, null=True)
+    coordinates = models.JSONField(blank=True, null=True)
+    raw_payload = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.sensor} @ {self.timestamp} - {self.action}"
+
+    def determine_action(self):
+        """Determine the action based on sensor type and data values"""
+        if self.sensor.sensor_type == 'AQ':
+            # Air Quality action rules
+            actions = []
+            if self.co2 and self.co2 > 1000:
+                actions.append('ALERT - HIGH_CO2 - Increase Ventilation')
+            if self.co2 and self.co2 > 800:
+                actions.append('HIGH_CO2 - Increase Ventilation')
+            if self.pm2p5 and self.pm2p5 > 35:
+                actions.append('HIGH_PM2P5 - Increase Ventilation')
+            if self.pm10 and self.pm10 > 100:
+                actions.append('HIGH_PM10 - Increase Ventilation')
+            if self.voc and self.voc > 220:
+                actions.append('HIGH_VOC - Increase Ventilation')
+            if self.temp and self.temp > 30:
+                actions.append('ALERT - HIGH_TEMP - Increase Cooling')
+            elif self.temp and self.temp > 26:
+                actions.append('HIGH_TEMP - Increase Cooling')
+            if self.temp and self.temp < 18:
+                actions.append('LOW_TEMP - Increase Heating')
+            
+            return ' | '.join(actions) if actions else 'NORMAL_AQ'
+            
+        elif self.sensor.sensor_type == 'EM':
+            # Energy Meter action rules
+            if self.total_act_power and self.total_act_power > 7000:
+                return 'HIGH_POWER_USAGE'
+            if self.a_current and self.a_current > 10:
+                return 'HIGH_CURRENT'
+            return 'NORMAL_EM'
+            
+        elif self.sensor.sensor_type == 'OC':
+            # Occupancy action rules
+            if self.total_entries and self.total_entries > (self.total_exits+100):
+                return 'VERY_POPULATED - Increase HVAC'
+            if self.total_entries and self.total_entries <= (self.total_exits):
+                return 'Decrease HVAC'
+            if self.entries and self.entries > 0:
+                return 'ENTRY_DETECTED'
+            if self.exits and self.exits > 0:
+                return 'EXIT_DETECTED'
+            return 'NO_MOVEMENT'
+            
+        elif self.sensor.sensor_type == 'RD':
+            # Radar action rules
+            if self.num_targets and self.num_targets > 3:
+                return 'VERY_POPULATED - Increase HVAC'
+            return 'NO_MOVEMENT'
+            
+        return 'UNKNOWN'
+
+    def save(self, *args, **kwargs):
+        if not self.action:
+            self.action = self.determine_action()
+        super().save(*args, **kwargs)
     

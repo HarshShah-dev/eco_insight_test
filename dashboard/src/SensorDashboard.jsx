@@ -200,7 +200,7 @@ export default function SensorDashboard({ section = "all" }) {
           <ChartCard title="Temperature (°C)" data={co2Data} dataKeys={["temp"]} unit="°C" />
           <Co2Meter value={currentCo2} title="Current CO₂ Level" />
           <Co2Meter value={avgCo2} title={`Avg CO₂ (${durationOptions.find(opt => opt.value === duration)?.label})`} />
-          <TempMeter value={currentTemp} title="Current Temperature" max={40000} />
+          <TempMeter value={currentTemp} title="Current Temperature" max={45} />
         </>
       )}
 

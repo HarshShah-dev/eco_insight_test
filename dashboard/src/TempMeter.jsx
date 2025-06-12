@@ -2,7 +2,7 @@
 import React from "react";
 import ReactSpeedometer from "react-d3-speedometer";
 
-export default function TempMeter({ value, max = 40000, title = "Gauge" }) {
+export default function TempMeter({ value, max = 45, title = "Gauge" }) {
   return (
     <div className="chart-card" style={{ textAlign: "center" }}>
       <h2 className="chart-title">{title}</h2>
@@ -15,7 +15,7 @@ export default function TempMeter({ value, max = 40000, title = "Gauge" }) {
         needleColor="#2d3436"
         currentValueText={`${value} °C`}
         height={200}
-        customSegmentStops={[0, 18000, 22000, 26000, 30000, 40000]}
+        customSegmentStops={[0, 18, 23, 26, 30, 45]}
         ringWidth={30}
         needleHeightRatio={0.7}
         valueFormat={"d"}
