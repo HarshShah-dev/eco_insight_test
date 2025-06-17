@@ -200,29 +200,29 @@ class OccupancyDataCreateView(APIView):
 
 class AirQualityDataHistoryView(APIView):
     def get(self, request):
-        data = AirQualityData.objects.order_by('-timestamp')[:100]  # last 100 entries
+        data = AirQualityData.objects.order_by('-timestamp')[::100]  # last 100 entries
         return Response(AirQualityDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryView(APIView):
     def get(self, request):
-        data = EnergyData.objects.order_by('-timestamp')[:100]
+        data = EnergyData.objects.order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class OccupancyDataHistoryView(APIView):
     def get(self, request):
-        data = OccupancyData.objects.order_by('-timestamp')[:100]
+        data = OccupancyData.objects.order_by('-timestamp')[::100]
         return Response(OccupancyDataSerializer(data, many=True).data)
     
 class EnergyDataHistoryViewLevel3(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='0', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[:100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryViewLevel4(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='1', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[:100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 
