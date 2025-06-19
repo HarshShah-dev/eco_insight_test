@@ -18,9 +18,22 @@ import TempMeter from "./TempMeter";
 
 const API_BASE_URL = "/api/data";
 
-const ChartCard = ({ title, data, dataKeys, unit }) => (
+const ChartCard = ({ title, data, dataKeys, unit, duration, onDurationChange, durationOptions }) => (
   <div className="chart-card">
-    <h2 className="chart-title">{title}</h2>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+      <h2 className="chart-title">{title}</h2>
+      <select
+        value={duration}
+        onChange={(e) => onDurationChange(e.target.value)}
+        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
+      >
+        {durationOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
     {data.length > 0 ? (
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={data}>
@@ -29,7 +42,10 @@ const ChartCard = ({ title, data, dataKeys, unit }) => (
             dataKey="timestamp"
             tickFormatter={(str) => {
               try {
-                return new Date(str).toLocaleTimeString([], {
+                const date = new Date(str);
+                return date.toLocaleString([], {
+                  month: "short",
+                  day: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
                 });
@@ -59,20 +75,27 @@ const ChartCard = ({ title, data, dataKeys, unit }) => (
 );
 
 const RecommendationPanel = () => {
-  const dummyRecommendations = [
-    "Reduce HVAC load in unoccupied zones: Occupancy sensors indicate low presence on Level 3.",
-    "Increase ventilation on Level 4: CO₂ levels exceed 1000 ppm, suggesting limited fresh air.",
-    "Shift non-critical equipment usage to off-peak hours: High energy draw detected between 2–4 PM.",
-  ];
+  const [recommendation, setRecommendation] = useState("Loading...");
+
+  useEffect(() => {
+    const fetchRec = async () => {
+      try {
+        const res = await axios.get("/api/recommendation/");
+        setRecommendation(res.data.recommendation || "No recommendation");
+      } catch (error) {
+        console.error("Failed to fetch recommendation", error);
+        setRecommendation("Error fetching recommendation");
+      }
+    };
+    fetchRec();
+    const interval = setInterval(fetchRec, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="recommendation-panel">
-      <h2 className="chart-title">AI Recommendations</h2>
-      <ul>
-        {dummyRecommendations.map((rec, index) => (
-          <li key={index} style={{ marginBottom: "8px", fontSize: "16px" }}>{rec}</li>
-        ))}
-      </ul>
+      <h2 className="chart-title">AI Recommendation</h2>
+      <p style={{ fontSize: "18px", padding: "8px", lineHeight: 1.4 }}>{recommendation}</p>
     </div>
   );
 };
@@ -87,8 +110,19 @@ export default function SensorDashboard({ section = "all" }) {
   const [currentCo2, setCurrentCo2] = useState(0);
   const [currentEnergyL3, setCurrentEnergyL3] = useState(0);
   const [currentEnergyL4, setCurrentEnergyL4] = useState(0);
-  const [duration, setDuration] = useState("1mo");
+  const [avgEnergyL3, setAvgEnergyL3] = useState(0);
+  const [avgEnergyL4, setAvgEnergyL4] = useState(0);
+  const [peakEnergyL3, setPeakEnergyL3] = useState({ value: 0, time: null });
+  const [peakEnergyL4, setPeakEnergyL4] = useState({ value: 0, time: null });
   const [currentTemp, setCurrentTemp] = useState(0);
+  const [peoplePresent, setPeoplePresent] = useState(0);
+  
+  // Individual durations for each chart
+  const [co2Duration, setCo2Duration] = useState("1mo");
+  const [tempDuration, setTempDuration] = useState("1mo");
+  const [energyL3Duration, setEnergyL3Duration] = useState("1mo");
+  const [energyL4Duration, setEnergyL4Duration] = useState("1mo");
+  const [occupancyDuration, setOccupancyDuration] = useState("1mo");
 
   const durationOptions = [
     { label: "Last 1 hour", value: "1h" },
@@ -100,10 +134,10 @@ export default function SensorDashboard({ section = "all" }) {
     { label: "All time", value: "all" },
   ];
 
-  const filterByDuration = (data) => {
+  const filterByDuration = (data, selectedDuration) => {
     const now = new Date();
     let cutoff;
-    switch (duration) {
+    switch (selectedDuration) {
       case "1h":
         cutoff = new Date(now.getTime() - 1 * 60 * 60 * 1000);
         break;
@@ -134,6 +168,25 @@ export default function SensorDashboard({ section = "all" }) {
 
   const sortByTime = (data) => data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+  const calculateAverage = (data, key) => {
+    if (!data || data.length === 0) return 0;
+    const sum = data.reduce((acc, item) => acc + (item[key] || 0), 0);
+    return Math.round(sum / data.length);
+  };
+
+  const calculatePeak = (data, key) => {
+    if (!data || data.length === 0) return { value: 0, time: null };
+    let max = -Infinity;
+    let maxTime = null;
+    data.forEach(item => {
+      if ((item[key] || 0) > max) {
+        max = item[key] || 0;
+        maxTime = item.timestamp;
+      }
+    });
+    return { value: max, time: maxTime };
+  };
+
   const fetchData = async () => {
     try {
       const [co2Res, emRes, ocRes, emL3Res, emL4Res] = await Promise.all([
@@ -144,7 +197,8 @@ export default function SensorDashboard({ section = "all" }) {
         axios.get(`${API_BASE_URL}/em/history/level4`),
       ]);
 
-      const co2Filtered = filterByDuration(sortByTime(co2Res.data));
+      const co2Sorted = sortByTime(co2Res.data);
+      const co2Filtered = filterByDuration(co2Sorted, co2Duration);
       setCo2Data(co2Filtered);
       const avg = co2Filtered.length ? co2Filtered.reduce((a, b) => a + b.co2, 0) / co2Filtered.length : 0;
       setAvgCo2(Math.round(avg));
@@ -153,17 +207,34 @@ export default function SensorDashboard({ section = "all" }) {
         setCurrentTemp(co2Filtered[co2Filtered.length - 1].temp);
       }
 
-      const l3Filtered = filterByDuration(sortByTime(emL3Res.data));
+      const l3Sorted = sortByTime(emL3Res.data);
+      const l3Filtered = filterByDuration(l3Sorted, energyL3Duration);
       setEmLevel3Data(l3Filtered);
-      if (l3Filtered.length > 0)
+      if (l3Filtered.length > 0) {
         setCurrentEnergyL3(l3Filtered[l3Filtered.length - 1].total_act_power);
+        setAvgEnergyL3(calculateAverage(l3Filtered, 'total_act_power'));
+        setPeakEnergyL3(calculatePeak(l3Filtered, 'total_act_power'));
+      }
 
-      const l4Filtered = filterByDuration(sortByTime(emL4Res.data));
+      const l4Sorted = sortByTime(emL4Res.data);
+      const l4Filtered = filterByDuration(l4Sorted, energyL4Duration);
       setEmLevel4Data(l4Filtered);
-      if (l4Filtered.length > 0)
+      if (l4Filtered.length > 0) {
         setCurrentEnergyL4(l4Filtered[l4Filtered.length - 1].total_act_power);
+        setAvgEnergyL4(calculateAverage(l4Filtered, 'total_act_power'));
+        setPeakEnergyL4(calculatePeak(l4Filtered, 'total_act_power'));
+      }
 
-      setOcData(filterByDuration(sortByTime(ocRes.data)));
+      const ocSorted = sortByTime(ocRes.data);
+      const ocFiltered = filterByDuration(ocSorted, occupancyDuration);
+      setOcData(ocFiltered);
+      if (ocFiltered.length > 0) {
+        const last = ocFiltered[ocFiltered.length - 1];
+        const present = Math.max(0, (last.total_entries || 0) - (last.total_exits || 0));
+        setPeoplePresent(present);
+      } else {
+        setPeoplePresent(0);
+      }
     } catch (error) {
       console.error("Error fetching sensor data:", error);
     }
@@ -173,48 +244,117 @@ export default function SensorDashboard({ section = "all" }) {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [duration]);
+  }, [co2Duration, tempDuration, energyL3Duration, energyL4Duration, occupancyDuration]);
 
   return (
     <div className="dashboard">
       {section === "all" && <RecommendationPanel />}
-      {section === "all" && (
-        <div style={{ padding: "0 24px", marginBottom: "16px" }}>
-          <label htmlFor="duration">View duration: </label>
-          <select
-            id="duration"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            style={{ marginLeft: "8px", padding: "4px 8px" }}
-          >
-            {durationOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {(section === "all" || section === "air") && (
         <>
-          <ChartCard title="CO2 Levels (ppm)" data={co2Data} dataKeys={["co2"]} unit="ppm" />
-          <ChartCard title="Temperature (°C)" data={co2Data} dataKeys={["temp"]} unit="°C" />
+          <ChartCard 
+            title="CO2 Levels (ppm)" 
+            data={co2Data} 
+            dataKeys={["co2"]} 
+            unit="ppm" 
+            duration={co2Duration}
+            onDurationChange={setCo2Duration}
+            durationOptions={durationOptions}
+          />
+          <ChartCard 
+            title="Temperature (°C)" 
+            data={co2Data} 
+            dataKeys={["temp"]} 
+            unit="°C" 
+            duration={tempDuration}
+            onDurationChange={setTempDuration}
+            durationOptions={durationOptions}
+          />
           <Co2Meter value={currentCo2} title="Current CO₂ Level" />
-          <Co2Meter value={avgCo2} title={`Avg CO₂ (${durationOptions.find(opt => opt.value === duration)?.label})`} />
+          <Co2Meter value={avgCo2} title={`Avg CO₂ (${durationOptions.find(opt => opt.value === co2Duration)?.label})`} />
           <TempMeter value={currentTemp} title="Current Temperature" max={45} />
         </>
       )}
 
       {(section === "all" || section === "energy") && (
         <>
-          <ChartCard title="Level 3 - Energy Usage (W)" data={emLevel3Data} dataKeys={["total_act_power"]} unit="W" />
-          <ChartCard title="Level 4 - Energy Usage (W)" data={emLevel4Data} dataKeys={["total_act_power"]} unit="W" />
-          <MetricCard label="Current Energy - Level 3" value={currentEnergyL3} unit="W" color="#0984e3" />
-          <MetricCard label="Current Energy - Level 4" value={currentEnergyL4} unit="W" color="#6c5ce7" />
+          <ChartCard 
+            title="Level 3 - Energy Usage (W)" 
+            data={emLevel3Data} 
+            dataKeys={["total_act_power"]} 
+            unit="W" 
+            duration={energyL3Duration}
+            onDurationChange={setEnergyL3Duration}
+            durationOptions={durationOptions}
+          />
+          <ChartCard 
+            title="Level 4 - Energy Usage (W)" 
+            data={emLevel4Data} 
+            dataKeys={["total_act_power"]} 
+            unit="W" 
+            duration={energyL4Duration}
+            onDurationChange={setEnergyL4Duration}
+            durationOptions={durationOptions}
+          />
+          <MetricCard 
+            label="Current Energy - Level 3" 
+            value={currentEnergyL3} 
+            unit="W" 
+            color="#0984e3" 
+          />
+          <MetricCard 
+            label={`Avg Energy - Level 3 (${durationOptions.find(opt => opt.value === energyL3Duration)?.label})`}
+            value={avgEnergyL3}
+            unit="W"
+            color="#0984e3"
+          />
+          <MetricCard 
+            label={`Peak Energy - Level 3 (${durationOptions.find(opt => opt.value === energyL3Duration)?.label})`}
+            value={peakEnergyL3.value}
+            unit="W"
+            color="#0984e3"
+            extra={peakEnergyL3.time ? `at ${new Date(peakEnergyL3.time).toLocaleString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', month: 'short', day: 'numeric' })}` : ''}
+          />
+          <MetricCard 
+            label="Current Energy - Level 4" 
+            value={currentEnergyL4} 
+            unit="W" 
+            color="#6c5ce7" 
+          />
+          <MetricCard 
+            label={`Avg Energy - Level 4 (${durationOptions.find(opt => opt.value === energyL4Duration)?.label})`}
+            value={avgEnergyL4}
+            unit="W"
+            color="#6c5ce7"
+          />
+          <MetricCard 
+            label={`Peak Energy - Level 4 (${durationOptions.find(opt => opt.value === energyL4Duration)?.label})`}
+            value={peakEnergyL4.value}
+            unit="W"
+            color="#6c5ce7"
+            extra={peakEnergyL4.time ? `at ${new Date(peakEnergyL4.time).toLocaleString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', month: 'short', day: 'numeric' })}` : ''}
+          />
         </>
       )}
 
       {(section === "all" || section === "occupancy") && (
-        <ChartCard title="Occupancy - Entries/Exits" data={ocData} dataKeys={["total_entries", "total_exits"]} unit="" />
+        <>
+          <ChartCard 
+            title="Occupancy - Entries/Exits" 
+            data={ocData} 
+            dataKeys={["total_entries", "total_exits"]} 
+            unit="" 
+            duration={occupancyDuration}
+            onDurationChange={setOccupancyDuration}
+            durationOptions={durationOptions}
+          />
+          <MetricCard
+            label="People Present"
+            value={peoplePresent}
+            unit=""
+            color="#00b894"
+          />
+        </>
       )}
     </div>
   );

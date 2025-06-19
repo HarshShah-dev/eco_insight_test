@@ -169,3 +169,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+.recommender_system/AQ_data.csv
+.recommender_system/EM_data.csv
+.recommender_system/OC_data.csv
+
+.server/server/settings.py
