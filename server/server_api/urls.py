@@ -3,7 +3,7 @@ from .views import (
     AirQualityDataListView, EnergyDataListView, OccupancyDataCreateView,
     AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView,
     EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView,
-    SensorListView, SensorDetailView
+    SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation
 )
 
 urlpatterns = [
@@ -21,4 +21,6 @@ urlpatterns = [
     # Sensor management endpoints
     path('sensors', SensorListView.as_view(), name='sensor_list'),
     path('sensors/<str:sensor_id>', SensorDetailView.as_view(), name='sensor_detail'),
+    path('recommendation/live', LiveRecommendationView.as_view(), name='live_recommendation'),
+    path("recommendation/", get_recommendation, name="get_recommendation"),
 ]

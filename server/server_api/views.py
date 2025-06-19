@@ -1,6 +1,8 @@
 from django.shortcuts import render
 
 # Create your views here.
+import joblib
+from rest_framework.decorators import api_view
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -13,6 +15,10 @@ from dateutil import parser as dateparser
 from .utils import parse_minew_data
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from .ml_model_loader import forecast_models, recommendation_model, label_encoder
+import pandas as pd
+import numpy as np
+from django.utils.timezone import now
 
 # class SensorReadingCreateView(APIView):
 #     # Allow all clients (no authentication needed)
@@ -200,29 +206,29 @@ class OccupancyDataCreateView(APIView):
 
 class AirQualityDataHistoryView(APIView):
     def get(self, request):
-        data = AirQualityData.objects.order_by('-timestamp')[::100]  # last 100 entries
+        data = AirQualityData.objects.order_by('-timestamp')[::2]  # last 100 entries
         return Response(AirQualityDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryView(APIView):
     def get(self, request):
-        data = EnergyData.objects.order_by('-timestamp')[::100]
+        data = EnergyData.objects.order_by('-timestamp')[::2]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class OccupancyDataHistoryView(APIView):
     def get(self, request):
-        data = OccupancyData.objects.order_by('-timestamp')[::100]
+        data = OccupancyData.objects.order_by('-timestamp')[::2]
         return Response(OccupancyDataSerializer(data, many=True).data)
     
 class EnergyDataHistoryViewLevel3(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='0', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::2]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryViewLevel4(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='1', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::2]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 
@@ -305,3 +311,89 @@ class SensorDataByActionView(APIView):
     def get(self, request, action):
         data = SensorData.objects.filter(action=action).order_by('-timestamp')[:100]
         return Response(SensorDataSerializer(data, many=True).data)
+    
+
+class LiveRecommendationView(APIView):
+    def get(self, request):
+        # Get latest data
+        aq = AirQualityData.objects.order_by('-timestamp').first()
+        em = EnergyData.objects.order_by('-timestamp').first()
+        oc = OccupancyData.objects.order_by('-timestamp').first()
+
+        if not all([aq, em, oc]):
+            return Response({"error": "Insufficient sensor data."}, status=400)
+
+        # Prepare current state
+        current_data = {
+            "co2": aq.co2 or 0,
+            "temp": aq.temp or 0,
+            "total_act_power": em.total_act_power or 0,
+            "total_entries": oc.total_entries or 0,
+            "total_exits": oc.total_exits or 0
+        }
+
+        # Forecast future values
+        forecasted = {}
+        for key, model in forecast_models.items():
+            # Dummy lag-based input (you may enhance this to use real lag/rolling features)
+            input_row = pd.DataFrame([{
+                f"{key}": current_data.get(key, 0),
+                f"{key}_lag_1": current_data.get(key, 0) - 5,
+                f"{key}_lag_2": current_data.get(key, 0) - 10,
+                f"{key}_lag_3": current_data.get(key, 0) - 15,
+                f"{key}_lag_5": current_data.get(key, 0) - 25,
+                f"{key}_lag_10": current_data.get(key, 0) - 50,
+                f"{key}_lag_30": current_data.get(key, 0) - 100,
+                f"{key}_lag_60": current_data.get(key, 0) - 150,
+                f"{key}_roll_3": current_data.get(key, 0),
+                f"{key}_roll_5": current_data.get(key, 0),
+                f"{key}_roll_10": current_data.get(key, 0)
+            }])
+            forecasted[f"{key}_future"] = model.predict(input_row)[0]
+
+        # Prepare input to recommender
+        input_row = pd.DataFrame([{
+            **current_data,
+            **forecasted
+        }])
+
+        encoded = recommendation_model.predict(input_row)[0]
+        action = label_encoder.inverse_transform([encoded])[0]
+
+        return Response({
+            "current": current_data,
+            "forecast": forecasted,
+            "recommended_action": action
+        })
+# Load models once at module level
+# rec_model = joblib.load("models/recommendation_model.pkl")
+# label_encoder = joblib.load("models/label_encoder.pkl")
+
+@api_view(["GET"])
+def get_recommendation(request):
+    try:
+        # Get the latest readings
+        aq = AirQualityData.objects.latest('timestamp')
+        em = EnergyData.objects.latest('timestamp')
+        oc = OccupancyData.objects.latest('timestamp')
+
+        # Create input for the recommendation model (adjust fields as needed)
+        row = pd.DataFrame([{
+            "co2": aq.co2,
+            "temp": aq.temp,
+            "total_act_power": em.total_act_power,
+            "total_entries": oc.total_entries,
+            "total_exits": oc.total_exits,
+            "co2_future": aq.co2 + 100,
+            "temp_future": aq.temp + 1.5,
+            "total_act_power_future": em.total_act_power + 500,
+            "total_entries_future": oc.total_entries + 10,
+            "total_exits_future": oc.total_exits + 10,
+        }])
+
+        prediction = recommendation_model.predict(row)[0]
+        label = label_encoder.inverse_transform([prediction])[0]
+
+        return Response({"recommendation": label})
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
