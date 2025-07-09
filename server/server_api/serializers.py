@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData
+from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData, RawSensorData
 
 class SensorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,10 +30,10 @@ class EnergyDataSerializer(serializers.ModelSerializer):
         model = EnergyData
         fields = '__all__'
 
-# class RawSensorDataSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = RawSensorData
-#         fields = '__all__'
+class RawSensorDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RawSensorData
+        fields = '__all__'
 
 class OccupancyDataSerializer(serializers.ModelSerializer):
     sensor = SensorSerializer(read_only=True)

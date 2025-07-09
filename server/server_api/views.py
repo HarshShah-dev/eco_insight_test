@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData
-from .serializers import AirQualityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer
+from .serializers import AirQualityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
 from dateutil import parser as dateparser
 from .utils import parse_minew_data
 from django.utils import timezone
@@ -88,17 +88,17 @@ class EnergyDataListView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# class RawSensorDataCreateView(APIView):
-#     # Allow all requests without authentication
-#     permission_classes = [AllowAny]
+class RawSensorDataCreateView(APIView):
+    # Allow all requests without authentication
+    permission_classes = [AllowAny]
 
-#     def post(self, request, format=None):
-#         # Wrap the incoming JSON data into a dict with key 'raw_data'
-#         serializer = RawSensorDataSerializer(data={'raw_data': request.data})
-#         if serializer.is_valid():
-#             serializer.save()  # Save the raw data to the database
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request, format=None):
+        # Wrap the incoming JSON data into a dict with key 'raw_data'
+        serializer = RawSensorDataSerializer(data={'raw_data': request.data})
+        if serializer.is_valid():
+            serializer.save()  # Save the raw data to the database
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 # server_api/views.py
 
@@ -206,29 +206,29 @@ class OccupancyDataCreateView(APIView):
 
 class AirQualityDataHistoryView(APIView):
     def get(self, request):
-        data = AirQualityData.objects.order_by('-timestamp')[::2]  # last 100 entries
+        data = AirQualityData.objects.order_by('-timestamp')[::100]  # Get every 100th entry for performance
         return Response(AirQualityDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryView(APIView):
     def get(self, request):
-        data = EnergyData.objects.order_by('-timestamp')[::2]
+        data = EnergyData.objects.order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class OccupancyDataHistoryView(APIView):
     def get(self, request):
-        data = OccupancyData.objects.order_by('-timestamp')[::2]
+        data = OccupancyData.objects.order_by('-timestamp')[::100]
         return Response(OccupancyDataSerializer(data, many=True).data)
     
 class EnergyDataHistoryViewLevel3(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='0', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::2]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryViewLevel4(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='1', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::2]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 

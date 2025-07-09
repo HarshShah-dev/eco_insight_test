@@ -107,12 +107,12 @@ class EnergyData(models.Model):
         super().save(*args, **kwargs)
 
 
-# class RawSensorData(models.Model):
-#     raw_data = models.JSONField()  # Stores the entire JSON payload
-#     received_at = models.DateTimeField(auto_now_add=True)
+class RawSensorData(models.Model):
+    raw_data = models.JSONField()  # Stores the entire JSON payload
+    received_at = models.DateTimeField(auto_now_add=True)
 
-#     def __str__(self):
-#         return f"Data received at {self.received_at}"
+    def __str__(self):
+        return f"Data received at {self.received_at}"
     
 class OccupancyData(models.Model):
     sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='oc_data', null=True, blank=True)
