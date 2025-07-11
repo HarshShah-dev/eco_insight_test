@@ -1,15 +1,15 @@
 from django.urls import path
 from .views import (
-    AirQualityDataListView, EnergyDataListView, OccupancyDataCreateView,
+    EnergyDataListView, OccupancyDataCreateView,
     AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView,
     EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView,
-    SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation
+    SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation, RawSensorDataCreateView, AirQualitySensorPushView,#AirQualityDataListView
 )
 
 urlpatterns = [
-    path('data/co2', AirQualityDataListView.as_view(), name='aq_data'),
+    # path('data/co2', AirQualityDataListView.as_view(), name='aq_data'),
     path('data/em', EnergyDataListView.as_view(), name='em_data'),
-    path('data/oc', OccupancyDataCreateView.as_view(), name='oc_data'),
+    path('data/oc', RawSensorDataCreateView.as_view(), name='oc_data'),
     path('data/oc/parsed', OccupancyDataCreateView.as_view(), name='parsed_oc_data'),
     path('data/co2/history', AirQualityDataHistoryView.as_view()),
     path('data/em/history', EnergyDataHistoryView.as_view()),
@@ -17,7 +17,8 @@ urlpatterns = [
     path('data/em/history/level3', EnergyDataHistoryViewLevel3.as_view()),
     path('data/em/history/level4', EnergyDataHistoryViewLevel4.as_view()),
     path('data/radar', RadarDataCreateView.as_view(), name='radar_data'),
-    path('data/lora-aq', AirQualityDataListView.as_view(), name='lora_aq_data'),
+    # path('data/lora-aq', AirQualityDataListView.as_view(), name='lora_aq_data'),
+    path("data/aq/push", AirQualitySensorPushView.as_view(), name="aq_push"),
     
     # Sensor management endpoints
     path('sensors', SensorListView.as_view(), name='sensor_list'),

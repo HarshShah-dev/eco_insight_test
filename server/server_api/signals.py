@@ -73,7 +73,7 @@ def create_unified_radar_data(sender, instance, created, **kwargs):
             sensor=instance.sensor,
             timestamp=instance.timestamp,
             mac=instance.mac,
-            radar_sn=instance.sn,
+            sn=instance.sn,
             num_targets=instance.num_targets,
             coordinates=instance.coordinates,
             raw_payload=instance.raw_payload

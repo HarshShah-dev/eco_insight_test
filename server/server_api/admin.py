@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Sensor, AirQualityData, EnergyData, OccupancyData, RadarData, SensorData
+from .models import Sensor, AirQualityData, EnergyData, OccupancyData, RadarData, SensorData, RawSensorData
 
 @admin.register(Sensor)
 class SensorAdmin(admin.ModelAdmin):
@@ -30,6 +30,17 @@ class RadarDataAdmin(admin.ModelAdmin):
     list_display = ('sensor', 'mac', 'num_targets', 'timestamp')
     list_filter = ('sensor', 'timestamp')
     search_fields = ('mac', 'sensor__sensor_id')
+
+@admin.register(RawSensorData)
+class RawSensorDataAdmin(admin.ModelAdmin):
+    list_display = ('id', 'received_at', 'short_preview')
+    readonly_fields = ('raw_data', 'received_at')
+    search_fields = ('raw_data',)
+    ordering = ('-received_at',)
+
+    def short_preview(self, obj):
+        return str(obj.raw_data)[:75] + "..." if len(str(obj.raw_data)) > 75 else str(obj.raw_data)
+    short_preview.short_description = "Raw Data Preview"
 
 @admin.register(SensorData)
 class SensorDataAdmin(admin.ModelAdmin):

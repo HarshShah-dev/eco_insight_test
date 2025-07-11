@@ -1,4 +1,10 @@
 from django.shortcuts import render
+from collections import defaultdict
+from datetime import datetime
+import pytz
+import time
+import logging
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 import joblib
@@ -46,26 +52,72 @@ def get_or_create_sensor(sensor_id, sensor_type, mac=None):
         )
         return sensor
 
-class AirQualityDataListView(APIView):
-    def get(self, request, format=None):
-        latest_data = AirQualityData.objects.order_by('-timestamp').first()
-        if latest_data:
-            serializer = AirQualityDataSerializer(latest_data)
-            return Response(serializer.data)
-        else:
-            return Response({"detail": "No sensor data available."})
+# class AirQualityDataListView(APIView):
+#     def get(self, request, format=None):
+#         latest_data = AirQualityData.objects.order_by('-timestamp').first()
+#         if latest_data:
+#             serializer = AirQualityDataSerializer(latest_data)
+#             return Response(serializer.data)
+#         else:
+#             return Response({"detail": "No sensor data available."})
 
-    def post(self, request, format=None):
-        data = request.data.copy()
-        sensor_id = data.get('device')  # Using device field as sensor_id
-        sensor = get_or_create_sensor(sensor_id, 'AQ')
-        data['sensor_id'] = sensor.id
+#     def post(self, request, format=None):
+#         data = request.data.copy()
+#         sensor_id = data.get('device')  # Using device field as sensor_id
+#         sensor = get_or_create_sensor(sensor_id, 'AQ')
+#         data['sensor_id'] = sensor.id
         
-        serializer = AirQualityDataSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#         serializer = AirQualityDataSerializer(data=data)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class AirQualitySensorPushView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            payload = request.data.get("msg", {})
+            if not payload:
+                return Response({"error": "Missing 'msg' field"}, status=status.HTTP_400_BAD_REQUEST)
+
+            device_id = payload.get("device_id")
+            if not device_id:
+                return Response({"error": "Missing 'device_id'"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get or create sensor
+            sensor = get_or_create_sensor(device_id, 'AQ')
+
+            # Convert UNIX timestamp to timezone-aware datetime
+            ts = int(payload.get("timestamp", time.time()))
+            timestamp = datetime.fromtimestamp(ts, tz=pytz.UTC)
+
+            aq_data = {
+                "sensor_id": sensor.id,
+                "device": device_id,
+                "co2": int(payload.get("co2", 0)),
+                "temp": int(payload.get("temperature", 0)),
+                "humidity": int(payload.get("humidity", 0)),
+                "voc": int(payload.get("tvoc_index", 0)),
+                "pm2p5": float(payload.get("pm_2p5", 0.0)),
+                "pm10": float(payload.get("pm_10", 0.0)),
+                "pm1": float(payload.get("pm_1", 0.0)),
+                "pm4": float(payload.get("pm_4", 0.0)),
+                "timestamp": timestamp,
+                "quality": "Unknown",
+                "version": payload.get("company_name", "Unknown"),
+            }
+
+            serializer = AirQualityDataSerializer(data=aq_data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class EnergyDataListView(APIView):
     def get(self, request, format=None):
@@ -103,6 +155,106 @@ class RawSensorDataCreateView(APIView):
 # server_api/views.py
 
 
+# class OccupancyDataCreateView(APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request, format=None):
+#         sensor_data_list = request.data
+#         created_count = 0
+#         errors = []
+#         i_total_entries = 0
+#         i_total_exits = 0
+#         parsed_dict = {}
+#         rssi = -1
+#         mac = 123
+#         # timestamp_str = "2025-03-25T06:02:57.717Z"
+#         s_no = 0
+#         i_s_no = 0
+
+#         last_record = OccupancyData.objects.order_by('-created_at').first()
+#         if last_record:
+#             i_total_entries = last_record.total_entries
+#             i_total_exits = last_record.total_exits
+#             i_s_no = last_record.serial_number
+#         else:
+#             i_total_entries = 0
+#             i_total_exits = 0
+#             i_s_no = 0
+
+#         for item in sensor_data_list:
+#             # Skip gateway records
+#             if "gateway" in item:
+#                 continue
+
+#             if "raw" in item:
+#                 raw = item.get("raw")
+#                 parsed_dict.update(parse_minew_data(raw))
+#                 # You may choose to log or handle errors if "error" key exists.
+#                 # For this example, we continue only if no error.
+#                 if parsed_dict.get("error"):
+#                     errors.append(f"Error parsing raw data for item {item}: {parsed_dict.get('error')}")
+#                     continue
+#             else:
+#                 errors.append(f"Missing 'raw' field in item: {item}")
+#                 continue
+            
+#             mac = item.get("mac")
+#             rssi = item.get("rssi")
+#             timestamp_1 = timezone.now()  # Default to current time if not provided
+#             # try:
+#             #     timestamp = dateparser.parse(timestamp_str)
+#             # except Exception:
+#             #     errors.append(f"Invalid timestamp: {timestamp_str}")
+#             #     continue
+#         timestamp_1 = timezone.now()
+
+#         # Get the number of new entries and exits from the parsed data.
+#         s_no = int(parsed_dict.get("serial_number", 0))
+#         print(s_no)
+#         entries = int(parsed_dict.get("entries", 0))
+#         exits = int(parsed_dict.get("exits", 0))
+        
+        
+#         if s_no != i_s_no:
+#             i_total_entries += entries
+#             i_total_exits += exits
+
+#         # Get or create sensor
+#         sensor = get_or_create_sensor(mac, 'OC')
+
+#         # Create a new OccupancyData record combining sensor JSON and parsed info
+#         record = OccupancyData.objects.create(
+#             sensor=sensor,
+#             mac=parsed_dict.get("mac") or mac,
+#             frame_version=parsed_dict.get("frame_version"),
+#             battery=parsed_dict.get("battery"),
+#             firmware_version=parsed_dict.get("firmware_version"),
+#             peripheral_support=parsed_dict.get("peripheral_support"),
+#             salt=parsed_dict.get("salt"),
+#             digital_signature=parsed_dict.get("digital_signature"),
+#             usage=parsed_dict.get("usage"),
+#             serial_number=parsed_dict.get("serial_number"),
+#             entries=parsed_dict.get("entries"),
+#             exits=parsed_dict.get("exits"),
+#             random_number=parsed_dict.get("random_number"),
+#             raw_data=parsed_dict.get("raw") or raw,
+#             rssi=parsed_dict.get("rssi") or rssi,
+#             timestamp=timestamp_1,
+#             total_entries=i_total_entries,
+#             total_exits=i_total_exits,
+#         )
+        
+#         print(f"Created record: {record.id}")
+#         created_count += 1
+#         parsed_dict = {}  # Reset parsed data for next iteration
+
+
+#         print(f"Total entries processed: {i_total_entries}, Total exits processed: {i_total_exits}")
+
+#         if errors:
+#             return Response({"errors": errors, "created": created_count}, status=status.HTTP_400_BAD_REQUEST)
+#         return Response({"created": created_count}, status=status.HTTP_201_CREATED)
+
 class OccupancyDataCreateView(APIView):
     permission_classes = [AllowAny]
 
@@ -110,98 +262,71 @@ class OccupancyDataCreateView(APIView):
         sensor_data_list = request.data
         created_count = 0
         errors = []
-        i_total_entries = 0
-        i_total_exits = 0
-        parsed_dict = {}
-        rssi = -1
-        mac = 123
-        # timestamp_str = "2025-03-25T06:02:57.717Z"
-        s_no = 0
-        i_s_no = 0
-
-        last_record = OccupancyData.objects.order_by('-created_at').first()
-        if last_record:
-            i_total_entries = last_record.total_entries
-            i_total_exits = last_record.total_exits
-            i_s_no = last_record.serial_number
-        else:
-            i_total_entries = 0
-            i_total_exits = 0
-            i_s_no = 0
+        totals_by_sensor = defaultdict(lambda: {"entries": 0, "exits": 0, "s_no": 0})
 
         for item in sensor_data_list:
-            # Skip gateway records
-            if "gateway" in item:
+            if "gateway" in item or "raw" not in item:
                 continue
 
-            if "raw" in item:
-                raw = item.get("raw")
-                parsed_dict.update(parse_minew_data(raw))
-                # You may choose to log or handle errors if "error" key exists.
-                # For this example, we continue only if no error.
-                if parsed_dict.get("error"):
-                    errors.append(f"Error parsing raw data for item {item}: {parsed_dict.get('error')}")
-                    continue
-            else:
-                errors.append(f"Missing 'raw' field in item: {item}")
+            raw = item["raw"]
+            parsed_dict = parse_minew_data(raw)
+
+            # Skip device information frame (frame_version == "00")
+            if parsed_dict.get("frame_version") == "00":
                 continue
-            
-            mac = item.get("mac")
-            rssi = item.get("rssi")
-            timestamp_1 = timezone.now()  # Default to current time if not provided
-            # try:
-            #     timestamp = dateparser.parse(timestamp_str)
-            # except Exception:
-            #     errors.append(f"Invalid timestamp: {timestamp_str}")
-            #     continue
-        timestamp_1 = timezone.now()
 
-        # Get the number of new entries and exits from the parsed data.
-        s_no = int(parsed_dict.get("serial_number", 0))
-        print(s_no)
-        entries = int(parsed_dict.get("entries", 0))
-        exits = int(parsed_dict.get("exits", 0))
-        
-        
-        if s_no != i_s_no:
-            i_total_entries += entries
-            i_total_exits += exits
-
-        # Get or create sensor
-        sensor = get_or_create_sensor(mac, 'OC')
-
-        # Create a new OccupancyData record combining sensor JSON and parsed info
-        record = OccupancyData.objects.create(
-            sensor=sensor,
-            mac=parsed_dict.get("mac") or mac,
-            frame_version=parsed_dict.get("frame_version"),
-            battery=parsed_dict.get("battery"),
-            firmware_version=parsed_dict.get("firmware_version"),
-            peripheral_support=parsed_dict.get("peripheral_support"),
-            salt=parsed_dict.get("salt"),
-            digital_signature=parsed_dict.get("digital_signature"),
-            usage=parsed_dict.get("usage"),
-            serial_number=parsed_dict.get("serial_number"),
-            entries=parsed_dict.get("entries"),
-            exits=parsed_dict.get("exits"),
-            random_number=parsed_dict.get("random_number"),
-            raw_data=parsed_dict.get("raw") or raw,
-            rssi=parsed_dict.get("rssi") or rssi,
-            timestamp=timestamp_1,
-            total_entries=i_total_entries,
-            total_exits=i_total_exits,
-        )
-        
-        print(f"Created record: {record.id}")
-        created_count += 1
-        parsed_dict = {}  # Reset parsed data for next iteration
+            # Skip if any other error
+            if parsed_dict.get("error"):
+                errors.append(f"Error parsing raw data for item {item}: {parsed_dict.get('error')}")
+                continue
 
 
-        print(f"Total entries processed: {i_total_entries}, Total exits processed: {i_total_exits}")
+            mac = item.get("mac", parsed_dict.get("mac", "unknown-mac"))
+            rssi = item.get("rssi", -99)
+            timestamp = timezone.now()
+            serial_no = int(parsed_dict.get("serial_number", 0))
+            entries = int(parsed_dict.get("entries", 0))
+            exits = int(parsed_dict.get("exits", 0))
 
-        if errors:
-            return Response({"errors": errors, "created": created_count}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"created": created_count}, status=status.HTTP_201_CREATED)
+            # Get or create sensor per MAC
+            sensor = get_or_create_sensor(mac, 'OC')
+
+            # Get last known totals for this sensor
+            if mac not in totals_by_sensor:
+                last_record = OccupancyData.objects.filter(sensor=sensor).order_by('-created_at').first()
+                totals_by_sensor[mac]["entries"] = last_record.total_entries if last_record else 0
+                totals_by_sensor[mac]["exits"] = last_record.total_exits if last_record else 0
+                totals_by_sensor[mac]["s_no"] = last_record.serial_number if last_record else -1
+
+            if serial_no != totals_by_sensor[mac]["s_no"]:
+                totals_by_sensor[mac]["entries"] += entries
+                totals_by_sensor[mac]["exits"] += exits
+                totals_by_sensor[mac]["s_no"] = serial_no
+
+            # Save record
+            record = OccupancyData.objects.create(
+                sensor=sensor,
+                mac=parsed_dict.get("mac", mac),
+                frame_version=parsed_dict.get("frame_version"),
+                battery=parsed_dict.get("battery"),
+                firmware_version=parsed_dict.get("firmware_version"),
+                peripheral_support=parsed_dict.get("peripheral_support"),
+                salt=parsed_dict.get("salt"),
+                digital_signature=parsed_dict.get("digital_signature"),
+                usage=parsed_dict.get("usage"),
+                serial_number=parsed_dict.get("serial_number"),
+                entries=parsed_dict.get("entries"),
+                exits=parsed_dict.get("exits"),
+                random_number=parsed_dict.get("random_number"),
+                raw_data=raw,
+                rssi=rssi,
+                timestamp=timestamp,
+                total_entries=totals_by_sensor[mac]["entries"],
+                total_exits=totals_by_sensor[mac]["exits"],
+            )
+            created_count += 1
+
+        return Response({"created": created_count, "errors": errors}, status=status.HTTP_201_CREATED if not errors else status.HTTP_207_MULTI_STATUS)
 
 
 class AirQualityDataHistoryView(APIView):
@@ -233,30 +358,69 @@ class EnergyDataHistoryViewLevel4(APIView):
 
 
 
+# class RadarDataCreateView(APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         logger.info(f"RADAR POST RECEIVED: {request.data}")
+#         try:
+#             data = request.data
+#             radar_info = data.get("radar", {})
+#             coordinates = radar_info.get("coord", {})
+#             mac = data.get("mac")
+            
+#             # Get or create sensor
+#             sensor = get_or_create_sensor(mac, 'RD', mac=mac)
+            
+#             record = RadarData.objects.create(
+#                 sensor=sensor,
+#                 mac=mac,
+#                 sn=int(data.get("sn")),
+#                 timestamp=data.get("timestamp"),
+#                 num_targets=int(radar_info.get("num", 0)),
+#                 coordinates=coordinates,
+#                 raw_payload=data
+#             )
+#             return Response({"status": "created", "id": record.id}, status=201)
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=400)
+import traceback
+
 class RadarDataCreateView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         try:
-            data = request.data
-            radar_info = data.get("radar", {})
+            # print("[DEBUG] Raw radar payload:", request.data)
+
+            radar_info = request.data.get("radar", {})
             coordinates = radar_info.get("coord", {})
-            mac = data.get("mac")
-            
-            # Get or create sensor
-            sensor = get_or_create_sensor(mac, 'RD', mac=mac)
-            
+            mac = request.data.get("mac")
+            sn = int(request.data.get("sn", 0))
+            num_targets = int(radar_info.get("num", 0))
+            timestamp = now()  # override sensor timestamp
+
+            if not mac:
+                return Response({"error": "Missing 'mac' field"}, status=400)
+
+            # Create or fetch the sensor
+            sensor = get_or_create_sensor(mac, 'RD')
+
             record = RadarData.objects.create(
                 sensor=sensor,
                 mac=mac,
-                sn=int(data.get("sn")),
-                timestamp=data.get("timestamp"),
-                num_targets=int(radar_info.get("num", 0)),
+                sn=sn,
+                timestamp=timestamp,
+                num_targets=num_targets,
                 coordinates=coordinates,
-                raw_payload=data
+                raw_payload=request.data
             )
+
             return Response({"status": "created", "id": record.id}, status=201)
+
         except Exception as e:
+            print("[ERROR] RadarDataCreateView Exception:", str(e))
+            # traceback.print_exc()
             return Response({"error": str(e)}, status=400)
 
 class SensorListView(APIView):

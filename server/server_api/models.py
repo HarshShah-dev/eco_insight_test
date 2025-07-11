@@ -33,7 +33,7 @@ class AirQualityData(models.Model):
     pm10 = models.FloatField()
     pm1 = models.FloatField()
     pm4 = models.FloatField()
-    timestamp = models.DateTimeField()
+    timestamp = models.DateTimeField(auto_now_add=True)
     version = models.CharField(max_length=50)
     action = models.CharField(max_length=100, blank=True, null=True)
 
@@ -202,14 +202,14 @@ class RadarData(models.Model):
 class SensorData(models.Model):
     sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='all_data')
     timestamp = models.DateTimeField()
-    action = models.CharField(max_length=50, blank=True, null=True)
+    action = models.CharField(max_length=255, blank=True, null=True)
     
     # Common fields that might be present in any sensor data
     device_id = models.CharField(max_length=100, blank=True, null=True)
     mac = models.CharField(max_length=50, blank=True, null=True)
     
     # Air Quality specific fields
-    quality = models.CharField(max_length=50, blank=True, null=True)
+    quality = models.CharField(max_length=100, blank=True, null=True)
     co2 = models.IntegerField(blank=True, null=True)
     temp = models.IntegerField(blank=True, null=True)
     humidity = models.IntegerField(blank=True, null=True)
@@ -218,7 +218,7 @@ class SensorData(models.Model):
     pm10 = models.FloatField(blank=True, null=True)
     pm1 = models.FloatField(blank=True, null=True)
     pm4 = models.FloatField(blank=True, null=True)
-    version = models.CharField(max_length=50, blank=True, null=True)
+    version = models.CharField(max_length=100, blank=True, null=True)
     
     # Energy Meter specific fields
     a_current = models.FloatField(blank=True, null=True)
