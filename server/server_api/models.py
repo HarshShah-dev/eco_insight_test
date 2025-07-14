@@ -2,23 +2,32 @@ from django.db import models
 
 # Create your models here.
 
-class LSG01AirQualityData(models.Model):
-    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE)
+# class LSG01AirQualityData(models.Model):
+#     sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE)
+#     device = models.CharField(max_length=100)
+#     co2 = models.PositiveIntegerField()
+#     temp = models.FloatField()
+#     humidity = models.FloatField()
+#     pm2p5 = models.PositiveIntegerField()
+#     pm10 = models.PositiveIntegerField()
+#     voc = models.PositiveIntegerField()
+#     timestamp = models.DateTimeField()
+#     version = models.CharField(max_length=50, default="LSG01")
+#     quality = models.CharField(max_length=20, default="Unknown")
+
+#     def __str__(self):
+#         return f"{self.device} | {self.timestamp}"
+
+class Lsg01AirQualityData(models.Model):
+    sensor = models.ForeignKey("Sensor", on_delete=models.CASCADE)
     device = models.CharField(max_length=100)
-    co2 = models.PositiveIntegerField()
-    temp = models.FloatField()
-    humidity = models.FloatField()
-    pm2p5 = models.PositiveIntegerField()
-    pm10 = models.PositiveIntegerField()
-    voc = models.PositiveIntegerField()
-    timestamp = models.DateTimeField()
-    version = models.CharField(max_length=50, default="LSG01")
-    quality = models.CharField(max_length=20, default="Unknown")
-
-    def __str__(self):
-        return f"{self.device} | {self.timestamp}"
-
-
+    pm25 = models.FloatField(null=True, blank=True)
+    hcho = models.FloatField(null=True, blank=True)
+    co2 = models.FloatField(null=True, blank=True)
+    tvoc = models.FloatField(null=True, blank=True)
+    temperature = models.FloatField(null=True, blank=True)
+    humidity = models.FloatField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
 
 # class SensorReading(models.Model):
 

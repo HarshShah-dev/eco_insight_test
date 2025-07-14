@@ -1,9 +1,9 @@
 from django.contrib import admin
-from .models import Sensor, AirQualityData, EnergyData, OccupancyData, RadarData, SensorData, RawSensorData, TemperatureHumidityData, LSG01AirQualityData
+from .models import Sensor, AirQualityData, EnergyData, OccupancyData, RadarData, SensorData, RawSensorData, TemperatureHumidityData, Lsg01AirQualityData
 
-@admin.register(LSG01AirQualityData)
+@admin.register(Lsg01AirQualityData)
 class LSG01AirQualityDataAdmin(admin.ModelAdmin):
-    list_display = ("sensor", "device", "timestamp", "temp", "humidity", "co2", "pm2p5", "pm10", "voc")
+    list_display = ('id', 'device', 'sensor', 'temperature', 'humidity', 'pm25', 'hcho', 'co2', 'tvoc', 'timestamp')
     list_filter = ("device", "timestamp")
     search_fields = ("device", "sensor__sensor_id")
 

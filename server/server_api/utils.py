@@ -1,6 +1,12 @@
 # server_api/utils.py
 import base64
 import struct
+import logging
+from datetime import timedelta
+from django.utils.timezone import now
+from server_api.models import AirQualityData, EnergyData, OccupancyData
+
+
 
 def parse_minew_data(raw_hex):
     """
@@ -126,7 +132,7 @@ def parse_minew_data(raw_hex):
         parsed["error"] = "Unknown frame version"
     return parsed
 
-# utils.py
+
 
 
 
@@ -186,9 +192,6 @@ def parse_mst01_ht_payload(b64_payload):
 #     except Exception as e:
 #         return {"error": str(e)}
 
-import base64
-import struct
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -248,3 +251,168 @@ def parse_lsg01_payload(frm_payload_b64):
     except Exception as e:
         logger.exception("Failed to decode LSG01 payload")
         return {"error": str(e)}
+
+
+
+logger = logging.getLogger(__name__)
+
+# LSG01 sensor tag definitions (tag → (label, num_bytes, signed, scale factor))
+LSG01_TAG_MAP = {
+    0x52: ("pm25", 2, False, 1),            # µg/m³
+    0x9F: ("hcho", 2, False, 1),            # µg/m³
+    0x49: ("co2", 2, False, 1),             # ppm
+    0xA0: ("tvoc", 2, False, 1),            # µg/m³
+    0x10: ("temperature", 2, True, 100),    # °C
+    0x12: ("humidity", 2, False, 10),       # %RH
+}
+
+
+def parse_lsg01_payload_dynamically(payload_base64: str) -> dict:
+    try:
+        # Decode base64 string to bytes
+        payload_bytes = base64.b64decode(payload_base64)
+        logger.debug(f"Decoded payload: {payload_bytes.hex()}")
+
+        index = 0
+        data = {}
+
+        # Skip header: 0x00 0x01 0x4B (LSG01 model ID)
+        if payload_bytes[:3] == b'\x00\x01\x4B':
+            index = 3
+        else:
+            logger.warning("Header doesn't match expected LSG01 prefix. Starting parse anyway.")
+
+        while index < len(payload_bytes):
+            tag = payload_bytes[index]
+            index += 1
+
+            if tag not in LSG01_TAG_MAP:
+                logger.warning(f"Unknown tag: 0x{tag:02X}, stopping parsing.")
+                break
+
+            label, num_bytes, is_signed, scale = LSG01_TAG_MAP[tag]
+
+            if index + num_bytes > len(payload_bytes):
+                logger.warning(f"Insufficient bytes for tag {label}, skipping.")
+                break
+
+            raw_bytes = payload_bytes[index:index + num_bytes]
+            index += num_bytes
+
+            # Convert bytes to value
+            value = int.from_bytes(raw_bytes, byteorder='big', signed=is_signed)
+            scaled_value = round(value / scale, 2)
+            data[label] = scaled_value
+
+        logger.debug(f"Parsed data: {data}")
+        return data
+
+    except Exception as e:
+        logger.exception("Error parsing LSG01 payload.")
+        return {"error": str(e)}
+
+
+
+# def format_recommendation(tags):
+#     if not tags:
+#         return "✅ All monitored offices are currently operating within optimal environmental conditions. No immediate action is required."
+
+#     summaries = []
+#     for tag in tags:
+#         if "HIGH_CO2" in tag:
+#             summaries.append("🌿 The CO₂ levels are high. Consider increasing ventilation.")
+#         elif "HIGH_TEMP" in tag:
+#             summaries.append("🌡️ The temperature is elevated. Increasing cooling is recommended.")
+#         elif "HIGH_OCCUPANCY" in tag:
+#             summaries.append("👥 Occupancy is high. Ensure air circulation is sufficient.")
+#         elif "HIGH_ENERGY" in tag:
+#             summaries.append("⚡ Energy usage is above average. Check for inefficient systems or unnecessary loads.")
+#         elif "LOW_TEMP" in tag:
+#             summaries.append("❄️ The temperature is unusually low. Consider adjusting the heating.")
+#         # Add more custom tags here as needed
+#         else:
+#             summaries.append(f"⚠️ {tag.replace('_', ' ').capitalize()}. Please review.")
+
+#     return " ".join(summaries)
+
+def get_energy_summary(latest_power_value):
+    try:
+        power_kw = latest_power_value / 1000.0  # convert W to kW
+        if power_kw < 4:
+            return f"🔋 Current energy usage is {power_kw:.1f} kW, which is low and optimal."
+        elif 4 <= power_kw <= 7:
+            return f"⚡ Current energy usage is {power_kw:.1f} kW, which is within the normal range."
+        else:
+            return f"⚠️ Current energy usage is {power_kw:.1f} kW, which is higher than expected. Consider checking for inefficiencies."
+    except Exception:
+        return "⚠️ Unable to retrieve current energy usage."
+
+
+
+
+def build_input_vector_from_latest_data():
+    """
+    Fetch the latest sensor readings and construct a model input vector.
+    Returns None if any key data is missing.
+    """
+    try:
+        cutoff_time = now() - timedelta(minutes=15)  # adjustable time window
+
+        latest_aq = AirQualityData.objects.filter(timestamp__gte=cutoff_time).order_by("-timestamp").first()
+        latest_em = EnergyData.objects.filter(timestamp__gte=cutoff_time).order_by("-timestamp").first()
+        latest_oc = OccupancyData.objects.filter(timestamp__gte=cutoff_time).order_by("-timestamp").first()
+
+        if not (latest_aq and latest_em and latest_oc):
+            return None
+
+        input_vector = {
+            "co2": latest_aq.co2 if latest_aq.co2 is not None else 0,
+            "temp": latest_aq.temp if latest_aq.temp is not None else 0,
+            "total_act_power": latest_em.total_act_power if latest_em.total_act_power is not None else 0,
+            "total_entries": latest_oc.total_entries if latest_oc.total_entries is not None else 0,
+            "total_exits": latest_oc.total_exits if latest_oc.total_exits is not None else 0,
+        }
+
+        return input_vector
+
+    except Exception as e:
+        print(f"Error building input vector: {e}")
+        return None
+
+
+
+
+def generate_recommendations_by_location():
+    """
+    Analyzes sensor readings per location and returns human-readable issue summaries.
+    """
+    recommendations = []
+    cutoff = now() - timedelta(minutes=15)
+
+    # --- Air Quality
+    aq_readings = AirQualityData.objects.filter(timestamp__gte=cutoff)
+    for aq in aq_readings:
+        loc = aq.location or f"Floor {aq.floor}" or "Unknown location"
+        if aq.co2 and aq.co2 > 1000:
+            recommendations.append(f"🌿 High CO₂ levels detected in {loc}. Please increase ventilation.")
+        if aq.temp and aq.temp > 27:
+            recommendations.append(f"🌡️ Elevated temperature in {loc}. Consider increasing cooling.")
+
+    # --- Energy Usage (aggregated)
+    em_readings = EnergyData.objects.filter(timestamp__gte=cutoff)
+    for em in em_readings:
+        loc = em.location or f"Floor {em.floor}" or "Unknown location"
+        if em.total_act_power and em.total_act_power > 8000:
+            recommendations.append(f"⚡ High energy consumption in {loc}. Check for unnecessary loads.")
+
+    # --- Occupancy
+    oc_readings = OccupancyData.objects.filter(timestamp__gte=cutoff)
+    for oc in oc_readings:
+        loc = oc.location or f"Floor {oc.floor}" or "Unknown location"
+        if oc.total_entries and oc.total_entries > 10:
+            recommendations.append(f"👥 High occupancy in {loc}. Ensure proper air circulation.")
+
+    if not recommendations:
+        recommendations.append("✅ All monitored rooms are currently operating within optimal conditions.")
+
+    return recommendations

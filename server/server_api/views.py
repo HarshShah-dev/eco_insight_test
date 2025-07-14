@@ -7,8 +7,8 @@ import logging
 logger = logging.getLogger(__name__)
 from .utils import parse_mst01_ht_payload
 import base64
-
-
+import traceback
+from .utils import get_energy_summary, build_input_vector_from_latest_data, generate_recommendations_by_location, parse_lsg01_payload_dynamically
 # Create your views here.
 import joblib
 from rest_framework.decorators import api_view
@@ -18,8 +18,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
-from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData, LSG01AirQualityData
-from .serializers import LSG01AirQualityDataSerializer, AirQualityDataSerializer, TemperatureHumidityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
+from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData, Lsg01AirQualityData
+from .serializers import Lsg01AirQualityDataSerializer, AirQualityDataSerializer, TemperatureHumidityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
 from dateutil import parser as dateparser
 from .utils import parse_minew_data, parse_lsg01_payload, parse_mst01_ht_payload
 from django.utils import timezone
@@ -33,52 +33,87 @@ from django.utils.timezone import now
 
 
 
-class LSG01AQPushView(APIView):
-    permission_classes = [AllowAny]
+# class LSG01AQPushView(APIView):
+#     permission_classes = [AllowAny]
 
+#     def post(self, request):
+#         try:
+#             data = request.data
+#             device_id = data.get("end_device_ids", {}).get("device_id")
+#             dev_eui = data.get("end_device_ids", {}).get("dev_eui")
+#             payload_b64 = data.get("uplink_message", {}).get("frm_payload")
+#             timestamp_str = data.get("received_at")
+
+#             if not all([device_id, dev_eui, payload_b64, timestamp_str]):
+#                 return Response({"error": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+
+#             raw_bytes = base64.b64decode(payload_b64)
+
+#             # Parse data
+#             co2 = int.from_bytes(raw_bytes[0:2], 'big')
+#             temp_raw = int.from_bytes(raw_bytes[2:4], 'big')
+#             temp = temp_raw / 10.0
+#             humidity = raw_bytes[4]
+#             pm2p5 = int.from_bytes(raw_bytes[5:7], 'big')
+#             pm10 = int.from_bytes(raw_bytes[7:9], 'big')
+#             tvoc_index = int.from_bytes(raw_bytes[9:11], 'big')
+
+#             # Timestamp
+#             timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+
+#             # Get or create sensor
+#             sensor = get_or_create_sensor(device_id, 'AQ')
+
+#             record = {
+#                 "sensor_id": sensor.id,
+#                 "device": device_id,
+#                 "co2": co2,
+#                 "temp": temp,
+#                 "humidity": humidity,
+#                 "pm2p5": pm2p5,
+#                 "pm10": pm10,
+#                 "voc": tvoc_index,
+#                 "timestamp": timestamp,
+#                 "version": "LSG01",
+#                 "quality": "Unknown",
+#             }
+
+#             serializer = LSG01AirQualityDataSerializer(data=record)
+#             if serializer.is_valid():
+#                 serializer.save()
+#                 return Response(serializer.data, status=status.HTTP_201_CREATED)
+#             else:
+#                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class Lsg01DataPush(APIView):
     def post(self, request):
+        print("[DEBUG] Received LSG01 payload:", request.data)
         try:
-            data = request.data
-            device_id = data.get("end_device_ids", {}).get("device_id")
-            dev_eui = data.get("end_device_ids", {}).get("dev_eui")
-            payload_b64 = data.get("uplink_message", {}).get("frm_payload")
-            timestamp_str = data.get("received_at")
+            payload = request.data
+            logger.debug(f"Incoming payload: {payload}")
 
-            if not all([device_id, dev_eui, payload_b64, timestamp_str]):
-                return Response({"error": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+            device_id = payload["end_device_ids"]["device_id"]
+            frm_payload = payload["uplink_message"]["frm_payload"]
 
-            raw_bytes = base64.b64decode(payload_b64)
+            # Decode sensor readings
+            parsed_data = parse_lsg01_payload_dynamically(frm_payload)
+            logger.debug(f"Parsed data: {parsed_data}")
 
-            # Parse data
-            co2 = int.from_bytes(raw_bytes[0:2], 'big')
-            temp_raw = int.from_bytes(raw_bytes[2:4], 'big')
-            temp = temp_raw / 10.0
-            humidity = raw_bytes[4]
-            pm2p5 = int.from_bytes(raw_bytes[5:7], 'big')
-            pm10 = int.from_bytes(raw_bytes[7:9], 'big')
-            tvoc_index = int.from_bytes(raw_bytes[9:11], 'big')
+            if "error" in parsed_data:
+                return Response({"error": parsed_data["error"]}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Timestamp
-            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # Get or create sensor (optional - modify if needed)
+            sensor = Sensor.objects.filter(sensor_id=device_id).first()
+            if not sensor:
+                return Response({"error": f"Sensor {device_id} not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get or create sensor
-            sensor = get_or_create_sensor(device_id, 'AQ')
+            parsed_data["sensor"] = sensor.id
+            parsed_data["device"] = device_id
 
-            record = {
-                "sensor_id": sensor.id,
-                "device": device_id,
-                "co2": co2,
-                "temp": temp,
-                "humidity": humidity,
-                "pm2p5": pm2p5,
-                "pm10": pm10,
-                "voc": tvoc_index,
-                "timestamp": timestamp,
-                "version": "LSG01",
-                "quality": "Unknown",
-            }
-
-            serializer = LSG01AirQualityDataSerializer(data=record)
+            serializer = Lsg01AirQualityDataSerializer(data=parsed_data)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -86,6 +121,7 @@ class LSG01AQPushView(APIView):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
+            logger.exception("Error processing LSG01 data.")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -653,71 +689,187 @@ class SensorDataByActionView(APIView):
         return Response(SensorDataSerializer(data, many=True).data)
     
 
+# class LiveRecommendationView(APIView):
+#     def get(self, request):
+#         # Get latest data
+#         aq = AirQualityData.objects.order_by('-timestamp').first()
+#         em = EnergyData.objects.order_by('-timestamp').first()
+#         oc = OccupancyData.objects.order_by('-timestamp').first()
+
+#         if not all([aq, em, oc]):
+#             return Response({"error": "Insufficient sensor data."}, status=400)
+
+#         # Prepare current state
+#         current_data = {
+#             "co2": aq.co2 or 0,
+#             "temp": aq.temp or 0,
+#             "total_act_power": em.total_act_power or 0,
+#             "total_entries": oc.total_entries or 0,
+#             "total_exits": oc.total_exits or 0
+#         }
+
+#         # Forecast future values
+#         forecasted = {}
+#         for key, model in forecast_models.items():
+#             # Dummy lag-based input (you may enhance this to use real lag/rolling features)
+#             input_row = pd.DataFrame([{
+#                 f"{key}": current_data.get(key, 0),
+#                 f"{key}_lag_1": current_data.get(key, 0) - 5,
+#                 f"{key}_lag_2": current_data.get(key, 0) - 10,
+#                 f"{key}_lag_3": current_data.get(key, 0) - 15,
+#                 f"{key}_lag_5": current_data.get(key, 0) - 25,
+#                 f"{key}_lag_10": current_data.get(key, 0) - 50,
+#                 f"{key}_lag_30": current_data.get(key, 0) - 100,
+#                 f"{key}_lag_60": current_data.get(key, 0) - 150,
+#                 f"{key}_roll_3": current_data.get(key, 0),
+#                 f"{key}_roll_5": current_data.get(key, 0),
+#                 f"{key}_roll_10": current_data.get(key, 0)
+#             }])
+#             forecasted[f"{key}_future"] = model.predict(input_row)[0]
+
+#         # Prepare input to recommender
+#         input_row = pd.DataFrame([{
+#             **current_data,
+#             **forecasted
+#         }])
+
+#         encoded = recommendation_model.predict(input_row)[0]
+#         action = label_encoder.inverse_transform([encoded])[0]
+
+#         return Response({
+#             "current": current_data,
+#             "forecast": forecasted,
+#             "recommended_action": action
+#         })
+
+
+# class LiveRecommendationView(APIView):
+#     def get(self, request):
+#         try:
+#             rec_input = build_input_vector_from_latest_data()
+#             if rec_input is None:
+#                 return Response({"recommendation": "Insufficient sensor data"}, status=200)
+
+#             # Predict recommended label
+#             pred_label = recommendation_model.predict([rec_input])[0]
+#             label = label_encoder.inverse_transform([pred_label])[0]
+#             tags = label.split(";")
+
+#             # Generate natural language summary
+#             summary_main = format_recommendation(tags)
+
+#             # Add energy usage note if available
+#             energy_val = rec_input.get("total_act_power", None)
+#             energy_summary = get_energy_summary(energy_val) if energy_val else ""
+
+#             final_message = f"{summary_main} {energy_summary}".strip()
+
+#             return Response({
+#                 "recommendation": final_message,
+#                 "tags": tags,
+#                 "current_energy_watts": energy_val
+#             })
+
+#         except Exception as e:
+#             return Response({"recommendation": "Error generating recommendation", "error": str(e)}, status=500)
+
+
 class LiveRecommendationView(APIView):
     def get(self, request):
-        # Get latest data
-        aq = AirQualityData.objects.order_by('-timestamp').first()
-        em = EnergyData.objects.order_by('-timestamp').first()
-        oc = OccupancyData.objects.order_by('-timestamp').first()
+        try:
+            messages = generate_recommendations_by_location()
+            return Response({
+                "recommendation": " ".join(messages),
+                "messages": messages
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
-        if not all([aq, em, oc]):
-            return Response({"error": "Insufficient sensor data."}, status=400)
 
-        # Prepare current state
-        current_data = {
-            "co2": aq.co2 or 0,
-            "temp": aq.temp or 0,
-            "total_act_power": em.total_act_power or 0,
-            "total_entries": oc.total_entries or 0,
-            "total_exits": oc.total_exits or 0
-        }
 
-        # Forecast future values
-        forecasted = {}
-        for key, model in forecast_models.items():
-            # Dummy lag-based input (you may enhance this to use real lag/rolling features)
-            input_row = pd.DataFrame([{
-                f"{key}": current_data.get(key, 0),
-                f"{key}_lag_1": current_data.get(key, 0) - 5,
-                f"{key}_lag_2": current_data.get(key, 0) - 10,
-                f"{key}_lag_3": current_data.get(key, 0) - 15,
-                f"{key}_lag_5": current_data.get(key, 0) - 25,
-                f"{key}_lag_10": current_data.get(key, 0) - 50,
-                f"{key}_lag_30": current_data.get(key, 0) - 100,
-                f"{key}_lag_60": current_data.get(key, 0) - 150,
-                f"{key}_roll_3": current_data.get(key, 0),
-                f"{key}_roll_5": current_data.get(key, 0),
-                f"{key}_roll_10": current_data.get(key, 0)
-            }])
-            forecasted[f"{key}_future"] = model.predict(input_row)[0]
-
-        # Prepare input to recommender
-        input_row = pd.DataFrame([{
-            **current_data,
-            **forecasted
-        }])
-
-        encoded = recommendation_model.predict(input_row)[0]
-        action = label_encoder.inverse_transform([encoded])[0]
-
-        return Response({
-            "current": current_data,
-            "forecast": forecasted,
-            "recommended_action": action
-        })
 # Load models once at module level
 # rec_model = joblib.load("models/recommendation_model.pkl")
 # label_encoder = joblib.load("models/label_encoder.pkl")
 
+# @api_view(["GET"])
+# def get_recommendation(request):
+#     try:
+#         # Get the latest readings
+#         aq = AirQualityData.objects.latest('timestamp')
+#         em = EnergyData.objects.latest('timestamp')
+#         oc = OccupancyData.objects.latest('timestamp')
+
+#         # Create input for the recommendation model (adjust fields as needed)
+#         row = pd.DataFrame([{
+#             "co2": aq.co2,
+#             "temp": aq.temp,
+#             "total_act_power": em.total_act_power,
+#             "total_entries": oc.total_entries,
+#             "total_exits": oc.total_exits,
+#             "co2_future": aq.co2 + 100,
+#             "temp_future": aq.temp + 1.5,
+#             "total_act_power_future": em.total_act_power + 500,
+#             "total_entries_future": oc.total_entries + 10,
+#             "total_exits_future": oc.total_exits + 10,
+#         }])
+
+#         prediction = recommendation_model.predict(row)[0]
+#         label = label_encoder.inverse_transform([prediction])[0]
+
+#         return Response({"recommendation": label})
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=500)
+
+
+def format_recommendation(tags, location_summary, power_kw):
+    if not tags or tags == [""]:
+        return "✅ All monitored rooms are currently operating within optimal environmental conditions."
+
+    summaries = []
+
+    for tag in tags:
+        if "HIGH_CO2" in tag:
+            summaries.append(f"🌿 High CO₂ levels detected in {location_summary}. Please increase ventilation.")
+        elif "HIGH_TEMP" in tag:
+            summaries.append(f"🌡️ Elevated temperature in {location_summary}. Consider increasing cooling.")
+        elif "HIGH_OCCUPANCY" in tag:
+            summaries.append(f"👥 High occupancy in {location_summary}. Ensure good air circulation.")
+        elif "HIGH_ENERGY" in tag:
+            summaries.append(f"⚡ High energy usage detected in {location_summary}. Check for inefficiencies.")
+        elif "LOW_TEMP" in tag:
+            summaries.append(f"❄️ Low temperature detected in {location_summary}. Consider heating.")
+        else:
+            summaries.append(f"⚠️ {tag.replace('_', ' ').capitalize()} in {location_summary}. Please review.")
+
+    # Add energy note
+    if power_kw < 4:
+        summaries.append(f"🔋 Current energy usage is {power_kw:.1f} kW (low and efficient).")
+    elif 4 <= power_kw <= 7:
+        summaries.append(f"⚡ Current energy usage is {power_kw:.1f} kW (normal).")
+    else:
+        summaries.append(f"⚠️ Current energy usage is {power_kw:.1f} kW (above optimal range).")
+
+    return " ".join(summaries)
+
+
 @api_view(["GET"])
 def get_recommendation(request):
     try:
-        # Get the latest readings
-        aq = AirQualityData.objects.latest('timestamp')
-        em = EnergyData.objects.latest('timestamp')
-        oc = OccupancyData.objects.latest('timestamp')
+        # Get latest sensor data
+        aq = AirQualityData.objects.latest("timestamp")
+        em = EnergyData.objects.latest("timestamp")
+        oc = OccupancyData.objects.latest("timestamp")
 
-        # Create input for the recommendation model (adjust fields as needed)
+        location_summary = (
+            getattr(aq.sensor, "floor", None) or
+            getattr(em.sensor, "floor", None) or
+            getattr(oc.sensor, "floor", None) or
+            "an unknown location"
+        )
+
+        power_kw = em.total_act_power / 1000.0 if em.total_act_power else 0
+
+        # Create model input
         row = pd.DataFrame([{
             "co2": aq.co2,
             "temp": aq.temp,
@@ -733,7 +885,17 @@ def get_recommendation(request):
 
         prediction = recommendation_model.predict(row)[0]
         label = label_encoder.inverse_transform([prediction])[0]
+        tags = label.split(";")
 
-        return Response({"recommendation": label})
+        summary = format_recommendation(tags, location_summary, power_kw)
+
+        return Response({
+            "recommendation": summary,
+            "tags": tags,
+            "location": location_summary,
+            "current_energy_kw": round(power_kw, 2)
+        })
+
     except Exception as e:
+        traceback.print_exc()  # This will print the full error to the terminal
         return Response({"error": str(e)}, status=500)
