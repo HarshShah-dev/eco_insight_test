@@ -1,5 +1,18 @@
 from rest_framework import serializers
-from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData, RawSensorData
+from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData, RawSensorData, TemperatureHumidityData, LSG01AirQualityData
+
+
+class LSG01AirQualityDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LSG01AirQualityData
+        fields = "__all__"
+
+
+
+class TemperatureHumidityDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemperatureHumidityData
+        fields = '__all__'
 
 class SensorSerializer(serializers.ModelSerializer):
     class Meta:

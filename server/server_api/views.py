@@ -5,6 +5,9 @@ import pytz
 import time
 import logging
 logger = logging.getLogger(__name__)
+from .utils import parse_mst01_ht_payload
+import base64
+
 
 # Create your views here.
 import joblib
@@ -15,16 +18,189 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
-from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData
-from .serializers import AirQualityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
+from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData, LSG01AirQualityData
+from .serializers import LSG01AirQualityDataSerializer, AirQualityDataSerializer, TemperatureHumidityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
 from dateutil import parser as dateparser
-from .utils import parse_minew_data
+from .utils import parse_minew_data, parse_lsg01_payload, parse_mst01_ht_payload
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from .ml_model_loader import forecast_models, recommendation_model, label_encoder
 import pandas as pd
 import numpy as np
 from django.utils.timezone import now
+# views.py (partial)
+
+
+
+
+class LSG01AQPushView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            data = request.data
+            device_id = data.get("end_device_ids", {}).get("device_id")
+            dev_eui = data.get("end_device_ids", {}).get("dev_eui")
+            payload_b64 = data.get("uplink_message", {}).get("frm_payload")
+            timestamp_str = data.get("received_at")
+
+            if not all([device_id, dev_eui, payload_b64, timestamp_str]):
+                return Response({"error": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+
+            raw_bytes = base64.b64decode(payload_b64)
+
+            # Parse data
+            co2 = int.from_bytes(raw_bytes[0:2], 'big')
+            temp_raw = int.from_bytes(raw_bytes[2:4], 'big')
+            temp = temp_raw / 10.0
+            humidity = raw_bytes[4]
+            pm2p5 = int.from_bytes(raw_bytes[5:7], 'big')
+            pm10 = int.from_bytes(raw_bytes[7:9], 'big')
+            tvoc_index = int.from_bytes(raw_bytes[9:11], 'big')
+
+            # Timestamp
+            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+
+            # Get or create sensor
+            sensor = get_or_create_sensor(device_id, 'AQ')
+
+            record = {
+                "sensor_id": sensor.id,
+                "device": device_id,
+                "co2": co2,
+                "temp": temp,
+                "humidity": humidity,
+                "pm2p5": pm2p5,
+                "pm10": pm10,
+                "voc": tvoc_index,
+                "timestamp": timestamp,
+                "version": "LSG01",
+                "quality": "Unknown",
+            }
+
+            serializer = LSG01AirQualityDataSerializer(data=record)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TemperatureHumidityCreateView(APIView):
+    def post(self, request):
+        frm_payload = request.data.get("data", {}).get("uplink_message", {}).get("frm_payload")
+        dev_id = request.data.get("data", {}).get("end_device_ids", {}).get("device_id", "unknown")
+
+        if not frm_payload:
+            return Response({"error": "Missing frm_payload"}, status=status.HTTP_400_BAD_REQUEST)
+
+        parsed = parse_mst01_ht_payload(frm_payload)
+        if "error" in parsed:
+            return Response(parsed, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get or create sensor
+        sensor = Sensor.objects.filter(sensor_id=dev_id).first()
+        if not sensor:
+            sensor = Sensor.objects.create(sensor_id=dev_id, sensor_type='AQ', description="MST01 Temp/Humidity Sensor")
+
+        data = {
+            "sensor_id": sensor.id,
+            "device": dev_id,
+            "co2": 0,
+            "temp": int(parsed["temperature"]),
+            "humidity": int(parsed["humidity"]),
+            "voc": 0,
+            "pm2p5": 0.0,
+            "pm10": 0.0,
+            "pm1": 0.0,
+            "pm4": 0.0,
+            "timestamp": now(),
+            "quality": "Unknown",
+            "version": "MST01",
+        }
+
+        serializer = AirQualityDataSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# class TemperatureHumidityCreateView(APIView):
+#     def post(self, request):
+#         payload = request.data
+#         device_id = payload.get("end_device_ids", {}).get("device_id")
+#         frm_payload = payload.get("uplink_message", {}).get("frm_payload")
+
+#         if not device_id or not frm_payload:
+#             return Response({"error": "Missing device_id or frm_payload"}, status=400)
+
+#         parsed = parse_mst01_ht_payload(frm_payload)
+#         if "error" in parsed:
+#             return Response(parsed, status=400)
+
+#         # Get or create sensor
+#         sensor = Sensor.objects.filter(sensor_id=device_id).first()
+#         if not sensor:
+#             sensor = Sensor.objects.create(sensor_id=device_id, sensor_type='AQ', description="MST01 Sensor")
+
+#         data = {
+#             "sensor": sensor.id,
+#             "device": device_id,
+#             "temperature": parsed["temperature"],
+#             "humidity": parsed["humidity"],
+#         }
+
+#         serializer = TemperatureHumidityDataSerializer(data=data)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data, status=201)
+#         print("[DEBUG] Serializer errors:", serializer.errors)
+#         return Response({"errors": serializer.errors}, status=400)
+# class TemperatureHumidityCreateView(APIView):
+#     def post(self, request):
+#         try:
+#             payload = request.data
+#             print("[DEBUG] Incoming payload:", payload)
+
+#             device_id = payload.get("end_device_ids", {}).get("device_id")
+#             frm_payload = payload.get("uplink_message", {}).get("frm_payload")
+
+#             if not device_id or not frm_payload:
+#                 return Response({"error": "Missing device_id or frm_payload"}, status=400)
+
+#             parsed = parse_mst01_ht_payload(frm_payload)
+#             print("[DEBUG] Decoded values:", parsed)
+
+#             if "error" in parsed:
+#                 return Response(parsed, status=400)
+
+#             sensor = Sensor.objects.filter(sensor_id=device_id).first()
+#             if not sensor:
+#                 sensor = Sensor.objects.create(sensor_id=device_id, sensor_type='AQ', description="MST01 Sensor")
+
+#             data = {
+#                 "sensor": sensor.id,
+#                 "device": device_id,
+#                 "temperature": parsed["temperature"],
+#                 "humidity": parsed["humidity"],
+#             }
+
+#             print("[DEBUG] Data sent to serializer:", data)
+#             serializer = TemperatureHumidityDataSerializer(data=data)
+#             if serializer.is_valid():
+#                 serializer.save()
+#                 return Response(serializer.data, status=201)
+#             else:
+#                 print("[DEBUG] Serializer errors:", serializer.errors)
+#                 return Response({"errors": serializer.errors}, status=400)
+
+#         except Exception as e:
+#             print("[ERROR]", str(e))
+#             return Response({"error": str(e)}, status=500)
+
 
 # class SensorReadingCreateView(APIView):
 #     # Allow all clients (no authentication needed)

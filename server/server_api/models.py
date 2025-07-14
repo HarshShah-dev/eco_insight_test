@@ -2,6 +2,24 @@ from django.db import models
 
 # Create your models here.
 
+class LSG01AirQualityData(models.Model):
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE)
+    device = models.CharField(max_length=100)
+    co2 = models.PositiveIntegerField()
+    temp = models.FloatField()
+    humidity = models.FloatField()
+    pm2p5 = models.PositiveIntegerField()
+    pm10 = models.PositiveIntegerField()
+    voc = models.PositiveIntegerField()
+    timestamp = models.DateTimeField()
+    version = models.CharField(max_length=50, default="LSG01")
+    quality = models.CharField(max_length=20, default="Unknown")
+
+    def __str__(self):
+        return f"{self.device} | {self.timestamp}"
+
+
+
 # class SensorReading(models.Model):
 
 #     co2 = models.IntegerField()
@@ -19,6 +37,17 @@ from django.db import models
 
 #     def __str__(self):
 #         return f"Sensor {self.sensor_id} at {self.timestamp}"
+
+class TemperatureHumidityData(models.Model):
+    sensor = models.ForeignKey('Sensor', on_delete=models.CASCADE, related_name='temp_humidity_data', null=True, blank=True)
+    device = models.CharField(max_length=100)
+    temperature = models.FloatField()
+    humidity = models.FloatField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.device} @ {self.timestamp} → Temp: {self.temperature}°C, Humidity: {self.humidity}%"
 
 
 class AirQualityData(models.Model):

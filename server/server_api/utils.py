@@ -1,4 +1,6 @@
 # server_api/utils.py
+import base64
+import struct
 
 def parse_minew_data(raw_hex):
     """
@@ -123,3 +125,126 @@ def parse_minew_data(raw_hex):
     else:
         parsed["error"] = "Unknown frame version"
     return parsed
+
+# utils.py
+
+
+
+def parse_mst01_ht_payload(b64_payload):
+    try:
+        decoded = base64.b64decode(b64_payload)
+        if len(decoded) < 30:
+            return {"error": "Frame too short"}
+
+        if decoded[7] != 0xCA or decoded[8] != 0x05:
+            return {"error": "Not an HT frame"}
+
+        temp_raw = int.from_bytes(decoded[12:14], byteorder="big")
+        hum_raw = int.from_bytes(decoded[14:16], byteorder="big")
+
+        temperature = round(temp_raw / 256.0, 1)
+        humidity = round(hum_raw / 256.0, 1)
+
+        return {
+            "temperature": temperature,
+            "humidity": humidity,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+# utils.py
+
+# def parse_mst01_ht_payload(b64_payload):
+#     try:
+#         decoded = base64.b64decode(b64_payload)
+#         hex_str = decoded.hex()
+#         print("[DEBUG] Raw decoded bytes:", hex_str)
+
+#         # Try multiple offset positions where temp/hum might be
+#         candidates = []
+
+#         for offset in range(len(decoded) - 2):
+#             temp_raw = int.from_bytes(decoded[offset:offset+2], byteorder="big")
+#             temp = round(temp_raw / 256.0, 1)
+#             if 0 <= temp <= 50:  # valid temperature range
+#                 hum_raw = int.from_bytes(decoded[offset+2:offset+4], byteorder="big")
+#                 hum = round(hum_raw / 256.0, 1)
+#                 if 0 <= hum <= 100:  # valid humidity range
+#                     candidates.append((offset, temp, hum))
+
+#         if not candidates:
+#             return {"error": "No valid temperature/humidity pair found"}
+
+#         # Return the first valid one found
+#         offset, temperature, humidity = candidates[0]
+#         print(f"[DEBUG] Selected offset: {offset}")
+#         return {
+#             "temperature": temperature,
+#             "humidity": humidity
+#         }
+
+#     except Exception as e:
+#         return {"error": str(e)}
+
+import base64
+import struct
+import logging
+
+logger = logging.getLogger(__name__)
+
+def parse_lsg01_payload(frm_payload_b64):
+    try:
+        payload_bytes = base64.b64decode(frm_payload_b64)
+        logger.debug(f"[LSG01] Raw bytes: {payload_bytes.hex()}")
+
+        i = 0
+        results = {}
+
+        while i < len(payload_bytes):
+            type_byte = payload_bytes[i]
+            i += 1
+
+            if type_byte == 0x01:  # Product ID
+                model_id = payload_bytes[i]
+                results["model_id"] = model_id
+                i += 1
+
+            elif type_byte == 0x52:  # PM2.5
+                pm25 = int.from_bytes(payload_bytes[i:i+2], byteorder="big")
+                results["pm25"] = pm25
+                i += 2
+
+            elif type_byte == 0x9F:  # HCHO
+                hcho = int.from_bytes(payload_bytes[i:i+2], byteorder="big")
+                results["hcho"] = hcho
+                i += 2
+
+            elif type_byte == 0x49:  # CO2
+                co2 = int.from_bytes(payload_bytes[i:i+2], byteorder="big")
+                results["co2"] = co2
+                i += 2
+
+            elif type_byte == 0xA0:  # TVOC
+                tvoc = int.from_bytes(payload_bytes[i:i+2], byteorder="big")
+                results["tvoc"] = tvoc
+                i += 2
+
+            elif type_byte == 0x10:  # Temperature
+                temp_raw = int.from_bytes(payload_bytes[i:i+2], byteorder="big", signed=True)
+                results["temperature"] = round(temp_raw / 100.0, 2)
+                i += 2
+
+            elif type_byte == 0x12:  # Humidity
+                humidity_raw = int.from_bytes(payload_bytes[i:i+2], byteorder="big")
+                results["humidity"] = round(humidity_raw / 10.0, 2)
+                i += 2
+
+            else:
+                logger.warning(f"Unknown type byte: {hex(type_byte)} at index {i-1}")
+                break
+
+        return results
+
+    except Exception as e:
+        logger.exception("Failed to decode LSG01 payload")
+        return {"error": str(e)}
