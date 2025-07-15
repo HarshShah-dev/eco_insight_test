@@ -187,6 +187,17 @@ export default function SensorDashboard({ section = "all" }) {
     return { value: max, time: maxTime };
   };
 
+  const groupOccupancyBySensor = (data) => {
+    const grouped = {};
+    for (const entry of data) {
+      const id = entry.sensor?.sensor_id;
+      if (!id) continue;
+      if (!grouped[id]) grouped[id] = { sensor: entry.sensor, data: [] };
+      grouped[id].data.push(entry);
+    }
+    return grouped;
+  };
+
   const fetchData = async () => {
     try {
       const [co2Res, emRes, ocRes, emL3Res, emL4Res] = await Promise.all([
@@ -339,15 +350,18 @@ export default function SensorDashboard({ section = "all" }) {
 
       {(section === "all" || section === "occupancy") && (
         <>
-          <ChartCard 
-            title="Occupancy - Entries/Exits" 
-            data={ocData} 
-            dataKeys={["total_entries", "total_exits"]} 
-            unit="" 
-            duration={occupancyDuration}
-            onDurationChange={setOccupancyDuration}
-            durationOptions={durationOptions}
-          />
+          {Object.entries(groupOccupancyBySensor(ocData)).map(([sensorId, { sensor, data }]) => (
+            <ChartCard
+              key={sensorId}
+              title={`Occupancy - ${sensorId} (Floor ${sensor.floor}, ${sensor.office || 'Unknown Office'})`}
+              data={data}
+              dataKeys={["total_entries", "total_exits"]}
+              unit=""
+              duration={occupancyDuration}
+              onDurationChange={setOccupancyDuration}
+              durationOptions={durationOptions}
+            />
+          ))}
           <MetricCard
             label="People Present"
             value={peoplePresent}
