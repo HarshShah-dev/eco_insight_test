@@ -2,8 +2,9 @@ from django.urls import path
 from .views import (
     EnergyDataListView, OccupancyDataCreateView,
     AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView,
-    EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView,
-    SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation, RawSensorDataCreateView, Lsg01DataPush, TemperatureHumidityCreateView, AirQualitySensorPushView,#AirQualityDataListView
+    EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView, RadarDataHistoryView,
+    SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation, 
+    RawSensorDataCreateView, Lsg01DataPush, TemperatureHumidityCreateView, AirQualitySensorPushView,#AirQualityDataListView
 )
 
 urlpatterns = [
@@ -17,6 +18,7 @@ urlpatterns = [
     path('data/em/history/level3', EnergyDataHistoryViewLevel3.as_view()),
     path('data/em/history/level4', EnergyDataHistoryViewLevel4.as_view()),
     path('data/radar', RadarDataCreateView.as_view(), name='radar_data'),
+    path('data/radar/history', RadarDataHistoryView.as_view(), name='radar_history'),
     # path('data/lora-aq', AirQualityDataListView.as_view(), name='lora_aq_data'),
     path("data/aq/push", AirQualitySensorPushView.as_view(), name="aq_push"),
     path("data/temp", TemperatureHumidityCreateView.as_view(), name="temp_data"),

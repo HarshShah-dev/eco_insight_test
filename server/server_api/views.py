@@ -555,7 +555,13 @@ class OccupancyDataHistoryView(APIView):
     def get(self, request):
         data = OccupancyData.objects.order_by('-timestamp')[::100]
         return Response(OccupancyDataSerializer(data, many=True).data)
-    
+
+class RadarDataHistoryView(APIView):
+    def get(self, request):
+        data = RadarData.objects.order_by('-timestamp')[::100] 
+        serializer = RadarDataSerializer(data, many=True)
+        return Response(serializer.data)
+
 class EnergyDataHistoryViewLevel3(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='0', sensor_type='EM')
@@ -688,6 +694,7 @@ class SensorDataByActionView(APIView):
         data = SensorData.objects.filter(action=action).order_by('-timestamp')[:100]
         return Response(SensorDataSerializer(data, many=True).data)
     
+
 
 # class LiveRecommendationView(APIView):
 #     def get(self, request):

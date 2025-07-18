@@ -116,7 +116,8 @@ export default function SensorDashboard({ section = "all" }) {
   const [peakEnergyL4, setPeakEnergyL4] = useState({ value: 0, time: null });
   const [currentTemp, setCurrentTemp] = useState(0);
   const [peoplePresent, setPeoplePresent] = useState(0);
-  
+  const [radarData, setRadarData] = useState([]);
+
   // Individual durations for each chart
   const [co2Duration, setCo2Duration] = useState("1mo");
   const [tempDuration, setTempDuration] = useState("1mo");
@@ -187,25 +188,55 @@ export default function SensorDashboard({ section = "all" }) {
     return { value: max, time: maxTime };
   };
 
-  const groupOccupancyBySensor = (data) => {
+  const groupOccupancyBySensorSorted = (data) => {
     const grouped = {};
+
+    data.forEach(entry => {
+      const sensor = entry.sensor;
+      const sensorId = sensor?.sensor_id || "unknown";
+
+      if (!grouped[sensorId]) {
+        grouped[sensorId] = {
+          sensor,
+          data: [],
+        };
+      }
+
+      grouped[sensorId].data.push(entry);
+    });
+
+    // Convert to array and sort by floor
+    return Object.entries(grouped).sort(
+      ([, a], [, b]) => (a.sensor.floor ?? -1) - (b.sensor.floor ?? -1)
+    );
+  };
+
+  const getLatestRadarBySensor = (data) => {
+    const latest = {};
+
     for (const entry of data) {
       const id = entry.sensor?.sensor_id;
       if (!id) continue;
-      if (!grouped[id]) grouped[id] = { sensor: entry.sensor, data: [] };
-      grouped[id].data.push(entry);
+
+      if (!latest[id] || new Date(entry.timestamp) > new Date(latest[id].timestamp)) {
+        latest[id] = entry;
+      }
     }
-    return grouped;
+
+    // Convert to sorted array by floor
+    return Object.values(latest).sort((a, b) => (a.sensor?.floor ?? -1) - (b.sensor?.floor ?? -1));
   };
+
 
   const fetchData = async () => {
     try {
-      const [co2Res, emRes, ocRes, emL3Res, emL4Res] = await Promise.all([
+      const [co2Res, emRes, ocRes, emL3Res, emL4Res, radarRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/co2/history`),
         axios.get(`${API_BASE_URL}/em/history`),
         axios.get(`${API_BASE_URL}/oc/history`),
         axios.get(`${API_BASE_URL}/em/history/level3`),
         axios.get(`${API_BASE_URL}/em/history/level4`),
+        axios.get(`${API_BASE_URL}/radar/history`),
       ]);
 
       const co2Sorted = sortByTime(co2Res.data);
@@ -235,6 +266,8 @@ export default function SensorDashboard({ section = "all" }) {
         setAvgEnergyL4(calculateAverage(l4Filtered, 'total_act_power'));
         setPeakEnergyL4(calculatePeak(l4Filtered, 'total_act_power'));
       }
+
+      setRadarData(radarRes.data);
 
       const ocSorted = sortByTime(ocRes.data);
       const ocFiltered = filterByDuration(ocSorted, occupancyDuration);
@@ -350,24 +383,43 @@ export default function SensorDashboard({ section = "all" }) {
 
       {(section === "all" || section === "occupancy") && (
         <>
-          {Object.entries(groupOccupancyBySensor(ocData)).map(([sensorId, { sensor, data }]) => (
-            <ChartCard
-              key={sensorId}
-              title={`Occupancy - ${sensorId} (Floor ${sensor.floor}, ${sensor.office || 'Unknown Office'})`}
-              data={data}
-              dataKeys={["total_entries", "total_exits"]}
+          {groupOccupancyBySensorSorted(ocData).map(([sensorId, { sensor, data }]) => {
+            const latest = data[data.length - 1];
+            const peoplePresent = Math.max(0, (latest?.total_entries || 0) - (latest?.total_exits || 0));
+            const floor = sensor?.floor ?? "?";
+            const office = sensor?.office ?? "?";
+
+            return (
+              <React.Fragment key={sensorId}>
+                <ChartCard
+                  title={`Occupancy: ${sensorId} (Floor ${floor}, ${office})`}
+                  data={data}
+                  dataKeys={["total_entries", "total_exits"]}
+                  unit=""
+                  duration={occupancyDuration}
+                  onDurationChange={setOccupancyDuration}
+                  durationOptions={durationOptions}
+                />
+                <MetricCard
+                  label={`People Present — ${sensorId}`}
+                  value={peoplePresent}
+                  unit=""
+                  color="#00b894"
+                  extra={`Floor ${floor}, ${office}`}
+                />
+              </React.Fragment>
+            );
+          })}
+          {getLatestRadarBySensor(radarData).map((entry) => (
+            <MetricCard
+              key={entry.sensor.sensor_id}
+              label={`People Detected — ${entry.sensor.sensor_id}`}
+              value={entry.num_targets}
               unit=""
-              duration={occupancyDuration}
-              onDurationChange={setOccupancyDuration}
-              durationOptions={durationOptions}
+              color="#fdcb6e"
+              extra={`Floor ${entry.sensor.floor ?? "?"}, ${entry.sensor.office ?? "?"}`}
             />
           ))}
-          <MetricCard
-            label="People Present"
-            value={peoplePresent}
-            unit=""
-            color="#00b894"
-          />
         </>
       )}
     </div>
