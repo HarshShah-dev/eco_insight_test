@@ -28,6 +28,8 @@ from .ml_model_loader import forecast_models, recommendation_model, label_encode
 import pandas as pd
 import numpy as np
 from django.utils.timezone import now
+from itertools import chain
+
 # views.py (partial)
 
 
@@ -543,36 +545,72 @@ class OccupancyDataCreateView(APIView):
 
 class AirQualityDataHistoryView(APIView):
     def get(self, request):
-        data = AirQualityData.objects.order_by('-timestamp')[::100]  # Get every 100th entry for performance
+        data = AirQualityData.objects.order_by('-timestamp')[::200]  # Get every 100th entry for performance
         return Response(AirQualityDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryView(APIView):
     def get(self, request):
-        data = EnergyData.objects.order_by('-timestamp')[::100]
+        data = EnergyData.objects.order_by('-timestamp')[::200]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class OccupancyDataHistoryView(APIView):
     def get(self, request):
-        data = OccupancyData.objects.order_by('-timestamp')[::100]
+        data = OccupancyData.objects.order_by('-timestamp')[::200]
         return Response(OccupancyDataSerializer(data, many=True).data)
 
 class RadarDataHistoryView(APIView):
     def get(self, request):
-        data = RadarData.objects.order_by('-timestamp')[::100] 
+        data = RadarData.objects.order_by('-timestamp')[::200] 
         serializer = RadarDataSerializer(data, many=True)
         return Response(serializer.data)
 
 class EnergyDataHistoryViewLevel3(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='0', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::200]
         return Response(EnergyDataSerializer(data, many=True).data)
 
 class EnergyDataHistoryViewLevel4(APIView):
     def get(self, request):
         sensor = get_object_or_404(Sensor, sensor_id='1', sensor_type='EM')
-        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::100]
+        data = EnergyData.objects.filter(sensor=sensor).order_by('-timestamp')[::200]
         return Response(EnergyDataSerializer(data, many=True).data)
+
+class Lsg01AirQualityHistoryView(APIView):
+    def get(self, request):
+        data = Lsg01AirQualityData.objects.order_by('-timestamp')[::500]
+        return Response(Lsg01AirQualityDataSerializer(data, many=True).data)
+
+class UnifiedAirQualityHistoryView(APIView):
+    def get(self, request):
+        # Fetch both AQ and LSG01 sensor data
+        aq_data = AirQualityData.objects.select_related("sensor").all()
+        lsg_data = Lsg01AirQualityData.objects.select_related("sensor").all()
+
+        # Transform to a common format
+        def transform_aq(entry):
+            return {
+                "sensor": SensorSerializer(entry.sensor).data,
+                "co2": entry.co2,
+                "temperature": entry.temp,
+                "timestamp": entry.timestamp,
+                "source": "AQ"
+            }
+
+        def transform_lsg(entry):
+            return {
+                "sensor": SensorSerializer(entry.sensor).data,
+                "co2": entry.co2,
+                "temperature": entry.temperature,
+                "timestamp": entry.timestamp,
+                "source": "LSG01"
+            }
+
+        unified = list(map(transform_aq, aq_data)) + list(map(transform_lsg, lsg_data))
+        unified.sort(key=lambda x: x["timestamp"], reverse=True)
+
+        return Response(unified[::200])  # Sample every 100th to reduce load
+
 
 
 

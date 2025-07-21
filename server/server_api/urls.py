@@ -4,7 +4,7 @@ from .views import (
     AirQualityDataHistoryView, EnergyDataHistoryView, OccupancyDataHistoryView,
     EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView, RadarDataHistoryView,
     SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation, 
-    RawSensorDataCreateView, Lsg01DataPush, TemperatureHumidityCreateView, AirQualitySensorPushView,#AirQualityDataListView
+    RawSensorDataCreateView, Lsg01DataPush, Lsg01AirQualityHistoryView, UnifiedAirQualityHistoryView, TemperatureHumidityCreateView, AirQualitySensorPushView,#AirQualityDataListView,
 )
 
 urlpatterns = [
@@ -24,6 +24,10 @@ urlpatterns = [
     path("data/temp", TemperatureHumidityCreateView.as_view(), name="temp_data"),
     # path("data/lora/aq", LSG01AQPushView.as_view(), name="lora_aq_push"),
     path("data/lsg01", Lsg01DataPush.as_view(), name="lsg01-data-push"),
+    path("data/lsg01/history", Lsg01AirQualityHistoryView.as_view(), name="lsg01_history"),
+    path("data/air/unified", UnifiedAirQualityHistoryView.as_view(), name="air_unified_history"),
+
+
 
     
     # Sensor management endpoints

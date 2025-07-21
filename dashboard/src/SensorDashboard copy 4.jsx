@@ -13,41 +13,19 @@ import {
 } from "recharts";
 import "./SensorDashboard.css";
 import Co2Meter from "./Co2Meter";
-import TempMeter from "./TempMeter";
 import MetricCard from "./MetricCard";
+import TempMeter from "./TempMeter";
 
 const API_BASE_URL = "/api/data";
 
-const ChartCard = ({
-  title,
-  data,
-  dataKeys,
-  unit,
-  duration,
-  onDurationChange,
-  durationOptions,
-  selectedSensor,
-  onSensorChange,
-  sensorOptions = [],
-}) => (
+const ChartCard = ({ title, data, dataKeys, unit, duration, onDurationChange, durationOptions }) => (
   <div className="chart-card">
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "12px" }}>
-      <h2 className="chart-title" style={{ marginRight: "auto" }}>{title}</h2>
-      {sensorOptions.length > 0 && (
-        <select
-          value={selectedSensor}
-          onChange={(e) => onSensorChange(e.target.value)}
-          style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid #ccc" }}
-        >
-          {sensorOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>{opt.label}</option>
-          ))}
-        </select>
-      )}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+      <h2 className="chart-title">{title}</h2>
       <select
         value={duration}
         onChange={(e) => onDurationChange(e.target.value)}
-        style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid #ccc" }}
+        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
       >
         {durationOptions.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -84,7 +62,7 @@ const ChartCard = ({
               key={i}
               type="monotone"
               dataKey={key}
-              stroke={["#8884d8", "#82ca9d", "#ffc658", "#ff7675"][i % 4]}
+              stroke={["#8884d8", "#82ca9d", "#ffc658"][i % 3]}
               dot={false}
             />
           ))}
@@ -120,24 +98,6 @@ const RecommendationPanel = () => {
       <p style={{ fontSize: "18px", padding: "8px", lineHeight: 1.4 }}>{recommendation}</p>
     </div>
   );
-};
-
-
-// --- Helper to filter sensor options ---
-const getSensorOptions = (data) => {
-  const seen = new Set();
-  return data
-    .filter((d) => d.sensor && d.sensor.sensor_id)
-    .filter((d) => {
-      const id = d.sensor.sensor_id;
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    })
-    .map((d) => ({
-      id: d.sensor.sensor_id,
-      label: `Sensor ${d.sensor.sensor_id} (Floor ${d.sensor.floor ?? "?"}, ${d.sensor.office ?? "?"})`,
-    }));
 };
 
 export default function SensorDashboard({ section = "all" }) {
@@ -190,25 +150,36 @@ export default function SensorDashboard({ section = "all" }) {
     let cutoff;
     switch (selectedDuration) {
       case "1h":
-        return data.filter((d) => new Date(d.timestamp) >= new Date(now - 1 * 60 * 60 * 1000));
+        cutoff = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        break;
       case "24h":
-        return data.filter((d) => new Date(d.timestamp) >= new Date(now - 24 * 60 * 60 * 1000));
+        cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
       case "7d":
-        return data.filter((d) => new Date(d.timestamp) >= new Date(now - 7 * 24 * 60 * 60 * 1000));
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
       case "1mo":
-        cutoff = new Date(); cutoff.setMonth(now.getMonth() - 1); break;
+        cutoff = new Date();
+        cutoff.setMonth(now.getMonth() - 1);
+        break;
       case "3mo":
-        cutoff = new Date(); cutoff.setMonth(now.getMonth() - 3); break;
+        cutoff = new Date();
+        cutoff.setMonth(now.getMonth() - 3);
+        break;
       case "6mo":
-        cutoff = new Date(); cutoff.setMonth(now.getMonth() - 6); break;
+        cutoff = new Date();
+        cutoff.setMonth(now.getMonth() - 6);
+        break;
+      case "all":
       default:
         return data;
     }
     return data.filter((d) => new Date(d.timestamp) >= cutoff);
   };
 
-  const sortByTime = (data) =>
-    [...data].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const sortByTime = (data) => data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  
 
   const calculateAverage = (data, key) => {
     if (!data || data.length === 0) return 0;
@@ -267,6 +238,7 @@ export default function SensorDashboard({ section = "all" }) {
     // Convert to sorted array by floor
     return Object.values(latest).sort((a, b) => (a.sensor?.floor ?? -1) - (b.sensor?.floor ?? -1));
   };
+
 
   const fetchData = async () => {
     try {
@@ -358,49 +330,131 @@ export default function SensorDashboard({ section = "all" }) {
   const co2Sensors = getSensorOptions(co2Data);
   const occSensors = getSensorOptions(ocData);
   const radarSensors = getSensorOptions(radarData);
-
+  
   return (
     <div className="dashboard">
+      {section === "all" && <RecommendationPanel />}
+
       {(section === "all" || section === "air") && (
         <>
-          <ChartCard
-            title="CO₂ Levels (ppm)"
-            data={filteredCo2}
-            dataKeys={["co2"]}
-            unit="ppm"
-            duration={co2Duration}
-            onDurationChange={setCo2Duration}
-            selectedSensor={selectedCo2Sensor}
-            onSensorChange={setSelectedCo2Sensor}
-            sensorOptions={co2Sensors}
-            durationOptions={durationOptions}
-          />
-          {filteredCo2.length > 0 && (
-            <Co2Meter
-              value={filteredCo2[filteredCo2.length - 1].co2}
-              title={`Current CO₂ (${selectedCo2Sensor})`}
-            />
-          )}
+          {Object.entries(
+            co2Data.reduce((acc, entry) => {
+              const id = entry.sensor?.sensor_id || "unknown";
+              if (!acc[id]) acc[id] = [];
+              acc[id].push(entry);
+              return acc;
+            }, {})
+          ).map(([sensorId, entries]) => {
+            const sensor = entries[0]?.sensor;
+            const label = `Sensor ${sensorId} (Floor ${sensor?.floor ?? "?"}, ${sensor?.office ?? "?"})`;
 
-          <ChartCard
-            title="Temperature (°C)"
-            data={filteredTemp}
-            dataKeys={["temp"]}
-            unit="°C"
-            duration={tempDuration}
-            onDurationChange={setTempDuration}
-            selectedSensor={selectedTempSensor}
-            onSensorChange={setSelectedTempSensor}
-            sensorOptions={co2Sensors}
-            durationOptions={durationOptions}
-          />
-          {filteredTemp.length > 0 && (
-            <TempMeter
-              value={filteredTemp[filteredTemp.length - 1].temp}
-              title={`Current Temp (${selectedTempSensor})`}
-              max={45}
-            />
-          )}
+            const latest = entries[entries.length - 1];
+            const currentCo2 = latest?.co2 ?? 0;
+            const currentTemp = latest?.temperature ?? latest?.temp ?? 0;
+
+            const avgCo2 = Math.round(
+              entries.reduce((sum, e) => sum + (e.co2 || 0), 0) / entries.length || 0
+            );
+            const avgTemp = Math.round(
+              entries.reduce((sum, e) => sum + (e.temperature ?? e.temp ?? 0), 0) / entries.length || 0
+            );
+
+            const durationLabel = durationOptions.find(opt => opt.value === co2Duration)?.label;
+
+            const entriesUnified = entries.map(d => ({
+              ...d,
+              temp_unified: d.temperature ?? d.temp ?? 0,
+            }));
+
+            return (
+              <React.Fragment key={sensorId}>
+                <ChartCard
+                  title={`CO₂ Levels — ${label}`}
+                  data={entries}
+                  dataKeys={["co2"]}
+                  unit="ppm"
+                  duration={co2Duration}
+                  onDurationChange={setCo2Duration}
+                  durationOptions={durationOptions}
+                />
+                <Co2Meter value={currentCo2} title={`Current CO₂ — ${label}`} />
+                <Co2Meter value={avgCo2} title={`Avg CO₂ (${durationLabel}) — ${label}`} />
+
+                <ChartCard
+                  title={`Temperature — ${label}`}
+                  data={entriesUnified}
+                  dataKeys={["temp_unified"]}
+                  unit="°C"
+                  duration={co2Duration}
+                  onDurationChange={setCo2Duration}
+                  durationOptions={durationOptions}
+                />
+                <TempMeter value={currentTemp} title={`Current Temp — ${label}`} />
+                <TempMeter value={avgTemp} title={`Avg Temp (${durationLabel}) — ${label}`} />
+              </React.Fragment>
+            );
+          })}
+
+          {/* {Object.entries(
+            co2Data.reduce((acc, entry) => {
+              const id = entry.sensor?.sensor_id || "unknown";
+              if (!acc[id]) acc[id] = [];
+              acc[id].push(entry);
+              return acc;
+            }, {})
+          ).map(([sensorId, entries]) => {
+            const sensor = entries[0]?.sensor;
+            const label = `Sensor ${sensorId} (Floor ${sensor?.floor ?? "?"}, ${sensor?.office ?? "?"})`;
+            const current = entries[entries.length - 1]?.co2 ?? 0;
+            const avg = Math.round(entries.reduce((sum, d) => sum + (d.co2 || 0), 0) / entries.length || 0);
+
+            return (
+              <React.Fragment key={sensorId}>
+                <ChartCard
+                  title={`CO₂ Levels — ${label}`}
+                  data={entries}
+                  dataKeys={["co2"]}
+                  unit="ppm"
+                  duration={co2Duration}
+                  onDurationChange={setCo2Duration}
+                  durationOptions={durationOptions}
+                />
+                <Co2Meter value={current} title={`Current CO₂ — ${label}`} />
+                <Co2Meter value={avg} title={`Avg CO₂ (${durationOptions.find(opt => opt.value === co2Duration)?.label}) — ${label}`} />
+              </React.Fragment>
+            );
+          })}
+          {Object.entries(
+            co2Data.reduce((acc, entry) => {
+              const id = entry.sensor?.sensor_id || "unknown";
+              if (!acc[id]) acc[id] = [];
+              acc[id].push(entry);
+              return acc;
+            }, {})
+          ).map(([sensorId, entries]) => {
+            const sensor = entries[0]?.sensor;
+            const label = `Sensor ${sensorId} (Floor ${sensor?.floor ?? "?"}, ${sensor?.office ?? "?"})`;
+            const currentTemp = entries[entries.length - 1]?.temperature ?? co2Filtered[co2Filtered.length - 1]?.temp ?? 0;
+            const avgTemp = Math.round(
+              entries.reduce((sum, d) => sum + (d.temperature ?? d.temp ?? 0), 0) / entries.length || 0
+            );
+
+            return (
+              <React.Fragment key={`temp-${sensorId}`}>
+                <ChartCard
+                  title={`Temperature — ${label}`}
+                  data={entries}
+                  dataKeys={["temp"]}
+                  unit="°C"
+                  duration={tempDuration}
+                  onDurationChange={setTempDuration}
+                  durationOptions={durationOptions}
+                />
+                <TempMeter value={currentTemp} title={`Current Temp — ${label}`} />
+                <TempMeter value={avgTemp} title={`Avg Temp (${durationOptions.find(opt => opt.value === tempDuration)?.label}) — ${label}`} />
+              </React.Fragment>
+            );
+          })} */}
         </>
       )}
 
@@ -467,35 +521,43 @@ export default function SensorDashboard({ section = "all" }) {
 
       {(section === "all" || section === "occupancy") && (
         <>
-          <ChartCard
-            title="Occupancy Entries/Exits"
-            data={filteredOcc}
-            dataKeys={["total_entries", "total_exits"]}
-            unit=""
-            duration={occupancyDuration}
-            onDurationChange={setOccupancyDuration}
-            selectedSensor={selectedOccSensor}
-            onSensorChange={setSelectedOccSensor}
-            sensorOptions={occSensors}
-            durationOptions={durationOptions}
-          />
-        </>
-      )}
+          {groupOccupancyBySensorSorted(ocData).map(([sensorId, { sensor, data }]) => {
+            const latest = data[data.length - 1];
+            const peoplePresent = Math.max(0, (latest?.total_entries || 0) - (latest?.total_exits || 0));
+            const floor = sensor?.floor ?? "?";
+            const office = sensor?.office ?? "?";
 
-      {(section === "all" || section === "radar") && (
-        <>
-          <ChartCard
-            title="Radar People Count"
-            data={filteredRadar}
-            dataKeys={["people_count"]}
-            unit=""
-            duration={radarDuration}
-            onDurationChange={setRadarDuration}
-            selectedSensor={selectedRadarSensor}
-            onSensorChange={setSelectedRadarSensor}
-            sensorOptions={radarSensors}
-            durationOptions={durationOptions}
-          />
+            return (
+              <React.Fragment key={sensorId}>
+                <ChartCard
+                  title={`Occupancy: ${sensorId} (Floor ${floor}, ${office})`}
+                  data={data}
+                  dataKeys={["total_entries", "total_exits"]}
+                  unit=""
+                  duration={occupancyDuration}
+                  onDurationChange={setOccupancyDuration}
+                  durationOptions={durationOptions}
+                />
+                <MetricCard
+                  label={`People Present — ${sensorId}`}
+                  value={peoplePresent}
+                  unit=""
+                  color="#00b894"
+                  extra={`Floor ${floor}, ${office}`}
+                />
+              </React.Fragment>
+            );
+          })}
+          {getLatestRadarBySensor(radarData).map((entry) => (
+            <MetricCard
+              key={entry.sensor.sensor_id}
+              label={`People Detected — ${entry.sensor.sensor_id}`}
+              value={entry.num_targets}
+              unit=""
+              color="#fdcb6e"
+              extra={`Floor ${entry.sensor.floor ?? "?"}, ${entry.sensor.office ?? "?"}`}
+            />
+          ))}
         </>
       )}
     </div>
