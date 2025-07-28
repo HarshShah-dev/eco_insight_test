@@ -134,3 +134,35 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Weather integration configuration
+WEATHER_DEFAULT_LOCATION = {
+    "name": "Sir Alwyn Williams Building",
+    "latitude": 55.873835,
+    "longitude": -4.292152,
+    "timezone": "Europe/London",
+    "forecast_days": 3,
+    "hourly": [
+        "temperature_2m",
+        "apparent_temperature",
+        "precipitation",
+        "precipitation_probability",
+        "weather_code",
+    ],
+    "daily": [
+        "weather_code",
+        "temperature_2m_min",
+        "temperature_2m_max",
+        "precipitation_probability_max",
+    ],
+    "current": [
+        "temperature_2m",
+        "apparent_temperature",
+        "precipitation",
+        "weather_code",
+    ],
+}
+
+# Optional: tune how many “future hours” you want to consider for recommendations
+WEATHER_FUTURE_HOURS_FOR_RULES = 6

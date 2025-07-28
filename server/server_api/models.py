@@ -354,4 +354,80 @@ class SensorData(models.Model):
         if not self.action:
             self.action = self.determine_action()
         super().save(*args, **kwargs)
+
+
+# --- Weather models ---
+
+class WeatherLocation(models.Model):
+    name = models.CharField(max_length=200, default="Default Location")
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    timezone = models.CharField(max_length=64, default="Europe/London")
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Weather Location"
+        verbose_name_plural = "Weather Locations"
+
+    def __str__(self):
+        return f"{self.name} ({self.latitude:.4f}, {self.longitude:.4f})"
+
+
+class WeatherHourly(models.Model):
+    location = models.ForeignKey(WeatherLocation, on_delete=models.CASCADE, related_name="hourly")
+    time = models.DateTimeField(db_index=True)
+
+    temperature_2m = models.FloatField(null=True, blank=True)
+    apparent_temperature = models.FloatField(null=True, blank=True)
+    precipitation = models.FloatField(null=True, blank=True)
+    precipitation_probability = models.IntegerField(null=True, blank=True)
+    weather_code = models.IntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("location", "time")
+        indexes = [models.Index(fields=["location", "time"])]
+
+    def __str__(self):
+        return f"{self.location} @ {self.time} ({self.temperature_2m}°C)"
+
+
+class WeatherDaily(models.Model):
+    location = models.ForeignKey(WeatherLocation, on_delete=models.CASCADE, related_name="daily")
+    date = models.DateField(db_index=True)
+
+    temperature_2m_min = models.FloatField(null=True, blank=True)
+    temperature_2m_max = models.FloatField(null=True, blank=True)
+    precipitation_probability_max = models.IntegerField(null=True, blank=True)
+    weather_code = models.IntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("location", "date")
+        indexes = [models.Index(fields=["location", "date"])]
+
+    def __str__(self):
+        return f"{self.location} @ {self.date}"
+
+
+class WeatherCurrent(models.Model):
+    location = models.ForeignKey(WeatherLocation, on_delete=models.CASCADE, related_name="current")
+    observed_at = models.DateTimeField(db_index=True)
+
+    temperature_2m = models.FloatField(null=True, blank=True)
+    apparent_temperature = models.FloatField(null=True, blank=True)
+    precipitation = models.FloatField(null=True, blank=True)
+    weather_code = models.IntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        get_latest_by = "observed_at"
+        indexes = [models.Index(fields=["location", "-observed_at"])]
+
+    def __str__(self):
+        return f"{self.location} current @ {self.observed_at}"
+
     

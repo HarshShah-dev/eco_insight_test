@@ -1,5 +1,10 @@
 from django.contrib import admin
-from .models import Sensor, AirQualityData, EnergyData, OccupancyData, RadarData, SensorData, RawSensorData, TemperatureHumidityData, Lsg01AirQualityData
+from .models import (
+    Sensor, AirQualityData, EnergyData, OccupancyData, 
+    RadarData, SensorData, RawSensorData, TemperatureHumidityData, Lsg01AirQualityData,
+    WeatherLocation, WeatherHourly, WeatherDaily, WeatherCurrent
+)
+
 
 @admin.register(Lsg01AirQualityData)
 class LSG01AirQualityDataAdmin(admin.ModelAdmin):
@@ -104,3 +109,32 @@ class SensorDataAdmin(admin.ModelAdmin):
             fieldsets.append(self.fieldsets[4])
             
         return fieldsets
+
+
+
+@admin.register(WeatherLocation)
+class WeatherLocationAdmin(admin.ModelAdmin):
+    list_display = ("name", "latitude", "longitude", "timezone", "active")
+    list_filter = ("active", "timezone")
+    search_fields = ("name",)
+
+
+@admin.register(WeatherHourly)
+class WeatherHourlyAdmin(admin.ModelAdmin):
+    list_display = ("location", "time", "temperature_2m", "apparent_temperature", "precipitation_probability", "weather_code")
+    list_filter = ("location", "time")
+    search_fields = ("location__name",)
+
+
+@admin.register(WeatherDaily)
+class WeatherDailyAdmin(admin.ModelAdmin):
+    list_display = ("location", "date", "temperature_2m_min", "temperature_2m_max", "precipitation_probability_max", "weather_code")
+    list_filter = ("location", "date")
+    search_fields = ("location__name",)
+
+
+@admin.register(WeatherCurrent)
+class WeatherCurrentAdmin(admin.ModelAdmin):
+    list_display = ("location", "observed_at", "temperature_2m", "apparent_temperature", "precipitation", "weather_code")
+    list_filter = ("location", "observed_at")
+    search_fields = ("location__name",)

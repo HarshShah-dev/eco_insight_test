@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData, RawSensorData, TemperatureHumidityData, Lsg01AirQualityData
-
+from .models import (
+    AirQualityData, EnergyData, OccupancyData, RadarData, Sensor, SensorData, RawSensorData, TemperatureHumidityData, Lsg01AirQualityData,
+    WeatherLocation, WeatherHourly, WeatherDaily, WeatherCurrent
+)
 
 # class LSG01AirQualityDataSerializer(serializers.ModelSerializer):
 #     class Meta:
@@ -87,3 +89,43 @@ class SensorDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = SensorData
         fields = '__all__'
+
+
+
+class WeatherLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeatherLocation
+        fields = "__all__"
+
+
+class WeatherHourlySerializer(serializers.ModelSerializer):
+    location = WeatherLocationSerializer(read_only=True)
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=WeatherLocation.objects.all(), source="location", write_only=True
+    )
+
+    class Meta:
+        model = WeatherHourly
+        fields = "__all__"
+
+
+class WeatherDailySerializer(serializers.ModelSerializer):
+    location = WeatherLocationSerializer(read_only=True)
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=WeatherLocation.objects.all(), source="location", write_only=True
+    )
+
+    class Meta:
+        model = WeatherDaily
+        fields = "__all__"
+
+
+class WeatherCurrentSerializer(serializers.ModelSerializer):
+    location = WeatherLocationSerializer(read_only=True)
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=WeatherLocation.objects.all(), source="location", write_only=True
+    )
+
+    class Meta:
+        model = WeatherCurrent
+        fields = "__all__"

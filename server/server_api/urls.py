@@ -5,6 +5,8 @@ from .views import (
     EnergyDataHistoryViewLevel3, EnergyDataHistoryViewLevel4, RadarDataCreateView, RadarDataHistoryView,
     SensorListView, SensorDetailView, LiveRecommendationView, get_recommendation, 
     RawSensorDataCreateView, Lsg01DataPush, Lsg01AirQualityHistoryView, UnifiedAirQualityHistoryView, TemperatureHumidityCreateView, AirQualitySensorPushView,#AirQualityDataListView,
+    WeatherLocationView, WeatherRefreshView, WeatherCurrentView, WeatherHourlyView, WeatherDailyView,
+    WeatherAwareRecommendationView,
 )
 
 urlpatterns = [
@@ -35,4 +37,12 @@ urlpatterns = [
     path('sensors/<str:sensor_id>', SensorDetailView.as_view(), name='sensor_detail'),
     path('recommendation/live', LiveRecommendationView.as_view(), name='live_recommendation'),
     path("recommendation/", get_recommendation, name="get_recommendation"),
+
+    # Weather data & recommendation
+    path("weather/locations", WeatherLocationView.as_view(), name="weather_locations"),
+    path("weather/refresh", WeatherRefreshView.as_view(), name="weather_refresh"),
+    path("weather/current", WeatherCurrentView.as_view(), name="weather_current"),
+    path("weather/hourly", WeatherHourlyView.as_view(), name="weather_hourly"),
+    path("weather/daily", WeatherDailyView.as_view(), name="weather_daily"),
+    path("recommendation/weather-aware", WeatherAwareRecommendationView.as_view(), name="weather_aware_recommendation"),
 ]

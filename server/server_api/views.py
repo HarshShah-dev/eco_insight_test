@@ -18,8 +18,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
-from .models import AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData, Lsg01AirQualityData
-from .serializers import Lsg01AirQualityDataSerializer, AirQualityDataSerializer, TemperatureHumidityDataSerializer, EnergyDataSerializer, OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, SensorDataSerializer, RawSensorDataSerializer
+
 from dateutil import parser as dateparser
 from .utils import parse_minew_data, parse_lsg01_payload, parse_mst01_ht_payload
 from django.utils import timezone
@@ -29,6 +28,21 @@ import pandas as pd
 import numpy as np
 from django.utils.timezone import now
 from itertools import chain
+
+from .models import (
+    AirQualityData, EnergyData, OccupancyData, Sensor, RadarData, SensorData, Lsg01AirQualityData,
+    WeatherLocation, WeatherHourly, WeatherDaily, WeatherCurrent,
+
+)
+from .serializers import (
+    Lsg01AirQualityDataSerializer, AirQualityDataSerializer, TemperatureHumidityDataSerializer, 
+    EnergyDataSerializer,OccupancyDataSerializer, RadarDataSerializer, SensorSerializer, 
+    SensorDataSerializer, RawSensorDataSerializer,
+    WeatherLocationSerializer, WeatherHourlySerializer, WeatherDailySerializer, WeatherCurrentSerializer
+)
+from .weather_service import (
+    ensure_default_location, refresh_weather_for_default_location, weather_feature_snapshot, overlay_weather_rules
+)
 
 # views.py (partial)
 
@@ -944,3 +958,77 @@ def get_recommendation(request):
     except Exception as e:
         traceback.print_exc()  # This will print the full error to the terminal
         return Response({"error": str(e)}, status=500)
+    
+
+# --- Weather endpoints ---
+
+class WeatherLocationView(APIView):
+    def get(self, request):
+        qs = WeatherLocation.objects.all()
+        return Response(WeatherLocationSerializer(qs, many=True).data)
+
+    def post(self, request):
+        serializer = WeatherLocationSerializer(data=request.data)
+        if serializer.is_valid():
+            obj = serializer.save()
+            return Response(WeatherLocationSerializer(obj).data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+class WeatherRefreshView(APIView):
+    """Fetch fresh weather from Open-Meteo and upsert into DB."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        loc = refresh_weather_for_default_location()
+        return Response({"status": "ok", "location": WeatherLocationSerializer(loc).data})
+
+
+class WeatherCurrentView(APIView):
+    def get(self, request):
+        loc = ensure_default_location()
+        obj = WeatherCurrent.objects.filter(location=loc).order_by("-observed_at").first()
+        if not obj:
+            return Response({"detail": "No current weather. POST /weather/refresh first."}, status=404)
+        return Response(WeatherCurrentSerializer(obj).data)
+
+
+class WeatherHourlyView(APIView):
+    def get(self, request):
+        loc = ensure_default_location()
+        qs = WeatherHourly.objects.filter(location=loc).order_by("time")[:24 * 3]  # ~3 days
+        return Response(WeatherHourlySerializer(qs, many=True).data)
+
+
+class WeatherDailyView(APIView):
+    def get(self, request):
+        loc = ensure_default_location()
+        qs = WeatherDaily.objects.filter(location=loc).order_by("date")[:7]
+        return Response(WeatherDailySerializer(qs, many=True).data)
+
+
+# --- Weather-aware recommendation overlay ---
+
+class WeatherAwareRecommendationView(APIView):
+    """
+    Calls your existing recommendation logic (if available in your system),
+    then overlays weather-based guidance for the next few hours.
+    """
+    def get(self, request):
+        # 1) Get base recommendation (reuse your existing logic)
+        # If you already have an endpoint/function that returns the base action,
+        # import and call it here. Below is a lightweight fallback:
+        base_action = "NORMAL_OPERATION"  # placeholder if your ML is not invoked here
+
+        # 2) Weather features
+        loc = ensure_default_location()
+        features = weather_feature_snapshot(loc)
+
+        # 3) Overlay rule-based guidance
+        adjusted = overlay_weather_rules(base_action, features)
+
+        return Response({
+            "base_recommendation": base_action,
+            "weather_features": features,
+            "adjusted_recommendation": adjusted
+        })
